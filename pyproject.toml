@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orbital-mcp"
+version = "0.1.0"
+description = "Local MCP routing layer for ACP-compatible coding harness delegation"
+readme = "docs/README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.27,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+orbital = "orbital_mcp.setup_cli:main"
+orbital-mcp = "orbital_mcp.cli:main"
+orbital-mcp-smoke = "orbital_mcp.smoke:main"
+orbital-watch = "orbital_mcp.watch:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orbital_mcp"]

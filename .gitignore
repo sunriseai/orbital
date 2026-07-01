@@ -1,0 +1,37 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build and packaging outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments and local Python config
+.venv/
+venv/
+env/
+.python-version
+
+# Orbital runtime state and test scratch data
+.orbital/
+.tmp-test-*/
+orbital.config.json
+
+# Logs and local diagnostics
+*.log
+*.tmp
+
+# OS/editor detritus
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
