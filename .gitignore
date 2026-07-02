@@ -28,6 +28,7 @@ orbital.config.json
 # Logs and local diagnostics
 *.log
 *.tmp
+manual_test/logs/
 
 # OS/editor detritus
 .DS_Store
