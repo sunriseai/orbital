@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -u -o pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG_DIR="${ORBITAL_MANUAL_LOG_DIR:-$ROOT_DIR/manual_test/logs}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LOG_DIR="${ORBITAL_MANUAL_LOG_DIR:-$ROOT_DIR/tests/manual/logs}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/manual_smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
 

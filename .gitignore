@@ -29,6 +29,7 @@ orbital.config.json
 *.log
 *.tmp
 manual_test/logs/
+tests/manual/logs/
 
 # OS/editor detritus
 .DS_Store
