@@ -13,6 +13,12 @@ from pathlib import Path
 from orbital_test_helpers import ROOT, write_fake_acp_config
 
 
+DEFAULT_REAL_HARNESS_PROFILES = [
+    "codex_acp_local",
+    "opencode_acp_local",
+]
+
+
 class OptionalSmokeValidationTests(unittest.TestCase):
     @unittest.skipUnless(
         os.environ.get("ORBITAL_RUN_PACKAGING_SMOKE") == "1",
@@ -130,49 +136,84 @@ class OptionalSmokeValidationTests(unittest.TestCase):
             item.strip()
             for item in os.environ.get("ORBITAL_REAL_HARNESS_PROFILES", "").split(",")
             if item.strip()
-        ]
-        if not profiles:
-            self.skipTest("set ORBITAL_REAL_HARNESS_PROFILES to one or more profile ids")
-        smoke = shutil.which("orbital-mcp-smoke")
-        orbital = shutil.which("orbital")
-        if not smoke or not orbital:
-            self.skipTest("installed orbital console scripts are required for real-harness smoke tests")
+        ] or DEFAULT_REAL_HARNESS_PROFILES
+
+        source_env = {
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                item for item in [str(ROOT / "src"), os.environ.get("PYTHONPATH", "")] if item
+            ),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+        timeout_seconds = int(os.environ.get("ORBITAL_REAL_HARNESS_TIMEOUT_SECONDS", "120"))
 
         with tempfile.TemporaryDirectory(prefix="orbital-real-smoke-") as raw:
             tmp = Path(raw)
+            smoke_base = tmp / "base"
+            smoke_base.mkdir()
             doctor = subprocess.run(
-                [orbital, "--base-dir", str(ROOT), "doctor"],
+                [
+                    sys.executable,
+                    "-m",
+                    "orbital_mcp.setup_cli",
+                    "--base-dir",
+                    str(smoke_base),
+                    "doctor",
+                    "--json",
+                ],
                 cwd=ROOT,
+                env=source_env,
                 check=False,
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
             self.assertEqual(doctor.returncode, 0, doctor.stderr + doctor.stdout)
+            doctor_payload = json.loads(doctor.stdout)
+            profile_status = {item["id"]: item for item in doctor_payload["profiles"]}
+            ready_profiles = [
+                profile
+                for profile in profiles
+                if profile in profile_status and profile_status[profile].get("ready") is True
+            ]
+            if not ready_profiles:
+                self.skipTest(f"no selected real-harness profiles are ready: {', '.join(profiles)}")
+
             for profile in profiles:
+                if profile not in profile_status:
+                    self.fail(f"unknown real-harness profile: {profile}")
+                if profile_status[profile].get("ready") is not True:
+                    reason = ", ".join(profile_status[profile].get("missing_prerequisites") or ["not ready"])
+                    with self.subTest(profile=profile):
+                        self.skipTest(f"{profile} is not ready: {reason}")
+                    continue
                 workdir = tmp / profile
                 workdir.mkdir()
-                completed = subprocess.run(
-                    [
-                        smoke,
-                        "--base-dir",
-                        str(ROOT),
-                        "--profile",
-                        profile,
-                        "--workdir",
-                        str(workdir),
-                        "--timeout-seconds",
-                        os.environ.get("ORBITAL_REAL_HARNESS_TIMEOUT_SECONDS", "120"),
-                    ],
-                    cwd=ROOT,
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                    timeout=int(os.environ.get("ORBITAL_REAL_HARNESS_TIMEOUT_SECONDS", "120")) + 30,
-                )
-                self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
-                payload = json.loads(completed.stdout)
-                self.assertIn(payload["status"], {"completed", "failed", "blocked", "cancelled", "interrupted", "unknown"})
+                with self.subTest(profile=profile):
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            "-m",
+                            "orbital_mcp.smoke",
+                            "--base-dir",
+                            str(smoke_base),
+                            "--profile",
+                            profile,
+                            "--workdir",
+                            str(workdir),
+                            "--timeout-seconds",
+                            str(timeout_seconds),
+                        ],
+                        cwd=ROOT,
+                        env=source_env,
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                        timeout=timeout_seconds + 30,
+                    )
+                    self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(payload["status"], "completed")
 
 
 if __name__ == "__main__":

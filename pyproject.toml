@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "orbital-mcp"
 version = "0.1.0"
 description = "Local MCP routing layer for ACP-compatible coding harness delegation"
-readme = "docs/README.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "mcp>=1.27,<2",

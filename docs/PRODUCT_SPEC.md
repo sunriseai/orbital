@@ -33,7 +33,7 @@ Rework these first-draft weaknesses:
 
 - Make multi-harness coding delegation easy to install and run locally.
 - Hide ACP and harness-specific protocol details behind one MCP tool surface.
-- Support multiple configured secondary harnesses, including OpenCode, Pi, Codex, and Claude Code.
+- Support multiple configured secondary harnesses, including OpenCode, Pi, Codex, Claude Code CLI fallback, and API-backed Claude Agent SDK ACP.
 - Let users classify harnesses by task suitability, cost posture, auth mode, capabilities, and operating constraints.
 - Give primary harnesses enough structured evidence to judge delegated work without trusting worker final prose.
 - Preserve a clean boundary between primary-only orchestration guidance and worker-safe task instructions.
@@ -238,6 +238,7 @@ The session model should preserve the first draft's useful operating loop:
 ## Product Principles
 
 - ACP first. Prefer ACP adapters for all supported harnesses.
+- Honest Claude paths. Treat Claude Code CLI as the local/subscription fallback path, and Claude Agent SDK ACP as an API-key, metered profile unless a local-subscription Claude ACP command is verified.
 - Primary-safe by default. Raw transcripts are opt-in debug material.
 - Honest unknowns. Unknown tokens, model names, checks, capabilities, and classifications should stay unknown.
 - Local and open. The default product should work as a local open source MCP.
@@ -249,6 +250,7 @@ The session model should preserve the first draft's useful operating loop:
 ## Open Questions
 
 - What exact ACP command should Pi expose, and which capability flags are reliably available?
+- What exact profile defaults should Orbital ship for `claude_agent_acp_api`, including required Node version, `claude-agent-acp` installation, and `ANTHROPIC_API_KEY` diagnostics?
 - Which harnesses should be labeled known-good ACP support, experimental ACP support, profile-template-only support, or CLI fallback support at launch?
 - Should profile classification be purely user-authored, or should Orbital support optional measured performance notes later?
 - Should profile selection by classification be a dedicated MCP tool, or folded into `start_task_run`?

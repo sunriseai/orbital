@@ -4,7 +4,7 @@ set -u -o pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG_DIR="${ORBITAL_MANUAL_LOG_DIR:-$ROOT_DIR/tests/manual/logs}"
 mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/manual_smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
+LOG_FILE="$LOG_DIR/faux_harness_smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
 
 FAILURES=0
 
@@ -58,7 +58,7 @@ cleanup_repo_artifacts() {
 }
 
 main() {
-  section "manual smoke metadata"
+  section "manual faux-harness smoke metadata"
   log "root: $ROOT_DIR"
   log "log: $LOG_FILE"
   log "date_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -108,9 +108,9 @@ main() {
 
   section "summary"
   if [[ $FAILURES -eq 0 ]]; then
-    log "PASS: manual smoke completed with no command failures."
+    log "PASS: manual faux-harness smoke completed with no command failures."
   else
-    log "FAIL: manual smoke completed with $FAILURES command failure(s)."
+    log "FAIL: manual faux-harness smoke completed with $FAILURES command failure(s)."
   fi
   log "Review log: $LOG_FILE"
   return "$FAILURES"

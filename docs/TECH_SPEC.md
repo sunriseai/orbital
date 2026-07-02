@@ -87,8 +87,11 @@ Suggested schema:
     "locality": "subscription"
   },
   "support": {
-    "tier": "known_good_acp",
-    "notes": []
+    "tier": "experimental_acp",
+    "notes": [
+      "Manual local smoke passed with OpenCode 1.17.11 and ACP protocolVersion 1.",
+      "Do not promote to known_good_acp until adapter conformance fixtures pass."
+    ]
   },
   "env": {},
   "policy": {
@@ -129,6 +132,7 @@ Supported runtime families for the first product pass:
 - `pi`
 - `codex`
 - `claude_code`
+- `claude_agent`
 
 Supported adapters:
 
@@ -152,6 +156,22 @@ Readiness and support tier are different:
 - Capability gaps answer which normalized features the primary harness should not assume for a particular profile.
 
 For example, a CLI profile can be ready and useful while still reporting `cli_fallback`, `supports_permissions=false`, `supports_followup_messages=false`, and `usage_telemetry=unknown`.
+
+Current local smoke evidence:
+
+- `codex_acp_local`: manual local ACP smoke passed through `codex-acp` using local subscription auth.
+- `opencode_acp_local`: manual local ACP smoke passed through `opencode acp --pure`; preflight recorded OpenCode `1.17.11` and ACP `protocolVersion=1`.
+- `claude_code_cli_local`: local/subscription Claude path is CLI fallback through `claude`, not ACP.
+- `claude_agent_acp_api`: planned API-backed ACP profile via `claude-agent-acp`; not implemented or smoke-verified yet.
+
+Smoke evidence is necessary but not sufficient for `known_good_acp`. A profile remains `experimental_acp` until adapter conformance fixtures cover initialization, prompt submission, event normalization, permissions, stop/cancel behavior, stderr, and telemetry expectations.
+
+Claude support should be modeled as two separate profile families:
+
+- `claude_code_cli_local`: local/subscription Claude Code through the `claude` command, with `adapter=cli`, `auth_mode=local_subscription`, `cost_posture=subscription_preferred`, and `support.tier=cli_fallback`.
+- `claude_agent_acp_api`: API-backed Claude Agent SDK through `claude-agent-acp`, with `adapter=acp`, `runtime_family=claude_agent`, `auth_mode=api_key`, `cost_posture=metered_api`, and disabled or explicit opt-in by default.
+
+Do not model a local-subscription `claude_code_acp_local` profile unless a real `claude-code-acp` style command is verified. The ACP registry currently points to Claude Agent SDK via `claude-agent-acp`, which is distinct from Claude Code CLI subscription auth.
 
 ## Classification Model
 
@@ -334,7 +354,7 @@ Adapter output must preserve:
 - event timestamp
 - run ID
 
-ACP compatibility differences should be hidden from primary harnesses. If OpenCode, Pi, Codex, or Claude Code use slightly different ACP event shapes, adapters should map them to the same event vocabulary.
+ACP compatibility differences should be hidden from primary harnesses. If OpenCode, Pi, Codex, or Claude Agent SDK use slightly different ACP event shapes, adapters should map them to the same event vocabulary.
 
 Adapter conformance fixtures:
 
@@ -630,6 +650,7 @@ Carry forward:
 - profile registry and readiness checks
 - ACP adapter normalization
 - local subscription auth posture
+- explicit API-backed Claude Agent SDK ACP posture
 - permission request normalization
 - task input boundaries
 - run store and file snapshots
@@ -648,6 +669,7 @@ Rework:
 - rename package, commands, config, and storage from Prole Harness to Orbital
 - make classification part of profiles
 - add Pi ACP profile support
+- replace the unverified `claude_code_acp_local` profile template with `claude_code_cli_local` plus disabled or explicit `claude_agent_acp_api`
 - reduce benchmark/playbook language in public docs
 - separate generic handoff sessions from later SDLC workflows
 - simplify install and setup docs for open source adoption

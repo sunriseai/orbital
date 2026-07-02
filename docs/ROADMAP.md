@@ -55,7 +55,7 @@ Deliverables:
 - Align profiles on the canonical `classification.task_tags`, `strengths`, `limits`, `max_recommended_scope`, `cost_preference`, and `locality` schema.
 - Add `recommend_harness_profiles` MCP tool.
 - Add support-tier labels for `known_good_acp`, `experimental_acp`, `profile_template`, and `cli_fallback`.
-- Add first-class default profile templates for OpenCode, Pi, Codex, and Claude Code, with honest support tiers and capability gaps.
+- Add first-class default profile templates for OpenCode, Pi, Codex, Claude Code CLI, and Claude Agent SDK ACP, with honest support tiers, auth modes, cost posture, and capability gaps.
 - Keep API-backed profiles disabled or explicit by default.
 - Add diagnostics that explain missing executables, auth gaps, and unavailable capabilities.
 - Replace default-first profile selection with explicit profile selection or classification-based recommendation.
@@ -75,11 +75,13 @@ Goal: make ACP the main adapter contract across supported harnesses.
 
 Deliverables:
 
-- Normalize ACP event shapes across OpenCode, Pi, Codex, and Claude Code where available.
+- Normalize ACP event shapes across OpenCode, Pi, Codex, and API-backed Claude Agent SDK where available.
 - Capture text updates, tool events, permission requests, stop behavior, model selection, and usage payloads.
 - Keep raw protocol payloads in debug logs, not primary-safe summaries.
 - Add adapter conformance fixtures for each supported runtime family.
 - Keep CLI compatibility only where ACP is not available or not reliable.
+- Treat Claude Code CLI as the local/subscription Claude path unless a local-subscription ACP command is verified.
+- Treat Claude ACP as `claude-agent-acp` through the Claude Agent SDK with API-key auth, not as a `claude-code-acp` local-subscription command.
 - Port or recreate the fake ACP harness strategy from Prole Harness MCP.
 - Add fixture coverage for malformed events, unknown event shapes, permission option matching, exact telemetry, stderr, and stop behavior.
 - Mark each profile's support tier from fixture and smoke-run evidence.
@@ -87,6 +89,8 @@ Deliverables:
 Exit criteria:
 
 - Each supported ACP harness can pass a smoke run.
+- Manual local ACP smoke currently covers Codex and OpenCode; OpenCode smoke records OpenCode `1.17.11` and ACP `protocolVersion=1`.
+- Claude Agent SDK ACP remains planned API-backed work until `claude_agent_acp_api` exists and passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.
 - Primary harnesses do not need runtime-specific ACP knowledge.
 - No runtime family is labeled `known_good_acp` without conformance fixture coverage.
@@ -123,6 +127,7 @@ Deliverables:
 - Public README focused on install, MCP connection, profile configuration, and first smoke run.
 - Contributor guide for adding adapters and profile templates.
 - Example configs for OpenCode, Pi, Codex, and Claude Code.
+- Example configs must distinguish Claude Code CLI fallback from API-backed Claude Agent SDK ACP.
 - Security model documentation.
 - Test suite organized around adapter fixtures, profile selection, policy, storage, summaries, and liveness.
 - Release checklist.

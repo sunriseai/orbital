@@ -75,7 +75,11 @@ Tests:
 - [ ] Add support tiers: `known_good_acp`, `experimental_acp`, `profile_template`, and `cli_fallback`.
 - [ ] Distinguish readiness, support tier, and capability gaps in all profile outputs.
 - [ ] Implement `recommend_harness_profiles` with deterministic ranking, reasons, caveats, matched tags, missing tags, matched capabilities, and missing capabilities.
-- [ ] Add first-class profile templates for OpenCode, Pi, Codex, and Claude Code with honest support tiers.
+- [ ] Add first-class profile templates for OpenCode, Pi, Codex, Claude Code CLI, and Claude Agent SDK ACP with honest support tiers.
+- [ ] Replace any unverified local-subscription `claude_code_acp_local` profile with `claude_code_cli_local` plus disabled or explicit API-backed `claude_agent_acp_api`.
+- [ ] Document Claude ACP as `claude-agent-acp` through the Claude Agent SDK with `ANTHROPIC_API_KEY`, not as a Claude Code CLI subscription path.
+- [ ] Record current smoke evidence in profile metadata or docs: Codex local ACP manual smoke passed, OpenCode local ACP manual smoke passed with OpenCode `1.17.11` and ACP `protocolVersion=1`.
+- [ ] Keep smoke-verified profiles at `experimental_acp` until adapter conformance fixtures justify `known_good_acp`.
 - [ ] Keep API-backed profiles disabled or explicit by default.
 - [ ] Prevent hidden profile switching inside a handoff session.
 
@@ -84,6 +88,8 @@ Acceptance criteria:
 - A ready profile is not automatically presented as known-good support.
 - The primary harness chooses the final profile assignment.
 - Recommendation output is deterministic for identical config and inputs.
+- Claude Code CLI and Claude Agent SDK ACP appear as separate profiles with different auth modes, cost postures, and support tiers.
+- OpenCode smoke evidence records the command, OpenCode version, ACP protocol version, selected profile, changed files, warnings, and telemetry availability.
 
 Tests:
 
@@ -91,6 +97,7 @@ Tests:
 - Unit tests for recommendation ranking and tie-breaking.
 - Regression tests for support-tier caveats and missing capability reporting.
 - Regression tests that metered/API profiles are never selected implicitly.
+- Regression tests that `claude_agent_acp_api` is explicit opt-in and `claude_code_cli_local` remains the local/subscription Claude fallback.
 
 ## 5. ACP Adapters And Compatibility
 
@@ -100,6 +107,8 @@ Tests:
 - [ ] Keep raw protocol payloads in debug logs, not primary-safe summaries.
 - [ ] Label no profile `known_good_acp` without conformance fixture coverage and a smoke run.
 - [ ] Keep CLI compatibility only where ACP is unavailable or unreliable.
+- [ ] Treat Claude Code CLI as the local/subscription Claude path until a local-subscription ACP command is verified.
+- [ ] Treat Claude Agent SDK ACP as API-key/metered via `claude-agent-acp`.
 - [ ] Report CLI fallback capability gaps explicitly, especially permissions, follow-up messages, stop behavior, tool events, and telemetry.
 
 Acceptance criteria:
@@ -114,6 +123,7 @@ Tests:
 - Fixture tests for each supported runtime family.
 - Regression tests for permission option matching and malformed ACP payloads.
 - Smoke tests for each profile that can be exercised locally.
+- Smoke tests should cover local Codex ACP and OpenCode ACP separately from API-backed Claude Agent ACP.
 
 ## 6. Run Lifecycle, Evidence, And File Attribution
 
@@ -212,6 +222,7 @@ Tests:
 - [ ] Write host contract documentation that separates prompt-driven worker behavior from server-driven evidence.
 - [ ] Write contributor guide for adding adapters and profile templates.
 - [ ] Add example configs for OpenCode, Pi, Codex, and Claude Code.
+- [ ] Split Claude examples into local Claude Code CLI fallback and API-backed Claude Agent SDK ACP.
 - [ ] Document support tiers, capability gaps, policy levels, recovery behavior, and primary-safe versus debug surfaces.
 - [ ] Add release checklist.
 - [ ] Ensure the full test suite can run without private credentials by using fake harnesses and optional smoke tests.
@@ -249,6 +260,8 @@ Tests:
 - [ ] Add default MCP stdio transport validation for tool listing, profile checks, fake task execution, primary-safe dialogue, and debug dialogue.
 - [ ] Add optional installed-package validation gated by `ORBITAL_RUN_PACKAGING_SMOKE=1`.
 - [ ] Add optional real-harness validation gated by `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` and selected profile IDs.
+- [ ] Keep default optional real-harness validation focused on local/subscription ACP profiles that do not require API keys.
+- [ ] Add a separate API-backed Claude Agent ACP smoke path gated by explicit profile selection and `ANTHROPIC_API_KEY`.
 
 Acceptance criteria:
 
@@ -259,6 +272,7 @@ Acceptance criteria:
 - Validation leaves no `.tmp-test-*`, `.orbital`, `__pycache__`, or `.pyc` artifacts behind in the repository tree.
 - No default test requires browser clicks, network access, private credentials, installed real harnesses, or model/API access.
 - Optional real-harness smoke coverage is explicitly separate from the default suite and skipped unless enabled by environment variables.
+- API-backed real-harness smoke coverage is never implied by local/subscription smoke commands.
 
 Tests:
 
@@ -269,6 +283,17 @@ Tests:
 - Storage durability regression tests for append-only latest-state semantics and malformed report handling.
 - MCP transport smoke tests for actual stdio tool wiring.
 - Optional packaging and real-harness smoke tests with explicit environment-variable gates.
+
+## Claude Profile Alignment Workplan
+
+1. Replace the runtime profile template named `claude_code_acp_local` with `claude_agent_acp_api`.
+2. Configure `claude_agent_acp_api` as `adapter=acp`, `runtime_family=claude_agent`, `command=["claude-agent-acp"]`, `auth_mode=api_key`, `cost_posture=metered_api`, and disabled or explicit opt-in by default.
+3. Keep `claude_code_cli_local` as `adapter=cli`, `runtime_family=claude_code`, `command=["claude"]`, `auth_mode=local_subscription`, `cost_posture=subscription_preferred`, and `support.tier=cli_fallback`.
+4. Update readiness diagnostics so `claude_agent_acp_api` checks for Node >= 22, `claude-agent-acp`, and `ANTHROPIC_API_KEY`, while `claude_code_cli_local` checks for `claude`.
+5. Update profile recommendation rules so the metered Claude Agent ACP profile is never selected implicitly.
+6. Add a Claude Agent ACP manual smoke script only after `claude_agent_acp_api` exists and readiness diagnostics can distinguish missing Node, missing `claude-agent-acp`, and missing `ANTHROPIC_API_KEY`; keep Codex/OpenCode as the only active local ACP manual scripts until then.
+7. Add or update regression tests for profile defaults, readiness diagnostics, metered opt-in, recommendation caveats, and manual smoke command naming.
+8. Run deterministic suite, packaging smoke, and local Codex/OpenCode manual smoke now; add explicit Claude Agent ACP manual smoke later only when API credentials are intentionally provided and the profile is implemented.
 
 ## Deferred
 
