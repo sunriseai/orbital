@@ -61,6 +61,8 @@ class DocsTodoTests(unittest.TestCase):
             "fake ACP harness",
             "CI-Safe Validation",
             "no clicks",
+            "ORBITAL_RUN_PACKAGING_SMOKE=1",
+            "ORBITAL_RUN_REAL_HARNESS_SMOKE=1",
             "../ngitd-core",
         ]
         for phrase in required_phrases:
@@ -96,6 +98,8 @@ class DocsTodoTests(unittest.TestCase):
             "real model calls",
             "installed real harnesses",
             "Fake ACP integration tests",
+            "MCP stdio transport",
+            "installed-package validation",
             "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v",
         ]:
             self.assertIn(phrase, self.todo)

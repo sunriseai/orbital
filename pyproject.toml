@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "orbital-mcp"
@@ -28,5 +28,5 @@ orbital-watch = "orbital_mcp.watch:main"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/orbital_mcp"]
+[tool.setuptools.packages.find]
+where = ["src"]

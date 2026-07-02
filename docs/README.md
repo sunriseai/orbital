@@ -32,6 +32,15 @@ Run the syntax check used during development:
 PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile $(find src tests -name '*.py' -print)
 ```
 
+Run optional smoke gates when you want broader runtime validation:
+
+```bash
+ORBITAL_RUN_PACKAGING_SMOKE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+ORBITAL_RUN_REAL_HARNESS_SMOKE=1 ORBITAL_REAL_HARNESS_PROFILES=opencode_acp_local PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+```
+
+The default suite includes a real MCP stdio transport smoke against the local fake harness. `ORBITAL_RUN_PACKAGING_SMOKE=1` additionally creates a temporary virtualenv, installs Orbital from a copied source tree, and verifies the installed console scripts. `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` is intentionally skipped unless you also provide installed/authenticated real harness profile IDs.
+
 Inspect the local setup:
 
 ```bash

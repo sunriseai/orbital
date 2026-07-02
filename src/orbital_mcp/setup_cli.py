@@ -23,7 +23,8 @@ def main() -> None:
     init.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
     profiles = subparsers.add_parser("profiles", help="Inspect harness profiles.")
-    profile_subcommands = profiles.add_subparsers(dest="profiles_command", required=True)
+    profiles.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    profile_subcommands = profiles.add_subparsers(dest="profiles_command")
     detect = profile_subcommands.add_parser("detect", help="Detect configured secondary harnesses.")
     detect.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
 
@@ -51,8 +52,8 @@ def main() -> None:
         _emit(_doctor(base_dir), as_json=args.json)
     elif args.command == "init":
         _emit(_init_payload(base_dir), as_json=args.json)
-    elif args.command == "profiles" and args.profiles_command == "detect":
-        _emit(_profiles_payload(base_dir), as_json=args.json)
+    elif args.command == "profiles" and args.profiles_command in {None, "detect"}:
+        _emit(_profiles_payload(base_dir), as_json=getattr(args, "json", False))
     elif args.command == "mcp-config":
         payload = mcp_config(args.host, base_dir)
         if args.write:

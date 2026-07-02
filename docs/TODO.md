@@ -246,10 +246,15 @@ Tests:
 - [ ] Add fake ACP failure-mode tests for non-zero worker exit, JSON-RPC error responses, ambiguous permission options, follow-up messages through `send_task_message`, and cooperative cancel versus forced termination evidence.
 - [ ] Add storage durability tests for malformed or partial final reports, append-only permission latest-state reads, and session warning persistence across service restart.
 - [ ] Add package/CLI validation that distinguishes source-tree execution from installed-package execution and records any packaging gap explicitly.
+- [ ] Add default MCP stdio transport validation for tool listing, profile checks, fake task execution, primary-safe dialogue, and debug dialogue.
+- [ ] Add optional installed-package validation gated by `ORBITAL_RUN_PACKAGING_SMOKE=1`.
+- [ ] Add optional real-harness validation gated by `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` and selected profile IDs.
 
 Acceptance criteria:
 
 - `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v` exercises the default deterministic and fake-harness validation suites without human intervention.
+- The default suite validates real MCP stdio transport using only the local fake harness.
+- `ORBITAL_RUN_PACKAGING_SMOKE=1` validates console scripts and fake smoke behavior from an installed package in a temporary virtualenv.
 - Fake-harness tests use only local fixture processes and temporary workdirs.
 - Validation leaves no `.tmp-test-*`, `.orbital`, `__pycache__`, or `.pyc` artifacts behind in the repository tree.
 - No default test requires browser clicks, network access, private credentials, installed real harnesses, or model/API access.
@@ -262,6 +267,8 @@ Tests:
 - Fake ACP integration tests for success, permissions, protocol robustness, failure modes, liveness/stop behavior, path policy, checks, smoke CLI, and session repair workflows.
 - MCP contract tests for stable success and error envelopes.
 - Storage durability regression tests for append-only latest-state semantics and malformed report handling.
+- MCP transport smoke tests for actual stdio tool wiring.
+- Optional packaging and real-harness smoke tests with explicit environment-variable gates.
 
 ## Deferred
 

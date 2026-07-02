@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -36,6 +37,27 @@ def fake_acp_profile() -> HarnessProfile:
     )
     profile.support.tier = "known_good_acp"
     return profile
+
+
+def write_fake_acp_config(base_dir: Path) -> None:
+    config = {
+        "default_profile": "fake_acp",
+        "storage_root": ".orbital",
+        "profiles": [
+            {
+                "id": "fake_acp",
+                "display_name": "Fake ACP",
+                "adapter": "acp",
+                "runtime_family": "fake",
+                "command": [sys.executable, str(ROOT / "tests" / "fixtures" / "fake_acp_harness.py")],
+                "auth_mode": "local_subscription",
+                "cost_posture": "subscription_preferred",
+                "capabilities": ["dialogue", "permissions", "tool_events", "stop"],
+                "support": {"tier": "known_good_acp"},
+            }
+        ],
+    }
+    (base_dir / "orbital.config.json").write_text(json.dumps(config), encoding="utf-8")
 
 
 async def wait_for_permission(service: TaskRunService, run_id: str) -> str:
