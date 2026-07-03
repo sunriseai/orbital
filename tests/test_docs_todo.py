@@ -72,6 +72,7 @@ class DocsTodoTests(unittest.TestCase):
             "OpenCode `1.17.11`",
             "ACP `protocolVersion=1`",
             "experimental_acp",
+            "adding a new ACP harness",
         ]
         for phrase in required_phrases:
             self.assertIn(phrase, self.todo)
@@ -122,6 +123,9 @@ class DocsTodoTests(unittest.TestCase):
         self.assertIn("ANTHROPIC_API_KEY", self.product)
         self.assertIn("ANTHROPIC_API_KEY", self.todo)
         self.assertIn("Claude Code CLI", self.readme)
+        self.assertIn("https://code.claude.com/docs/en/agent-sdk/overview", self.readme)
+        self.assertIn("https://agentclientprotocol.com/get-started/agents", self.readme)
+        self.assertIn("SDK-built third-party agents should use API-key authentication", self.readme)
         self.assertNotIn("claude_code_acp_local", self.readme)
         self.assertNotIn("claude_code_acp_local", self.product)
         self.assertNotIn("claude_code_acp_local", self.roadmap)
@@ -132,6 +136,20 @@ class DocsTodoTests(unittest.TestCase):
         self.assertIn("Manual local ACP smoke currently covers Codex and OpenCode", self.roadmap)
         self.assertIn("Keep smoke-verified profiles at `experimental_acp`", self.todo)
         self.assertIn("Do not promote to known_good_acp until adapter conformance fixtures pass.", self.tech)
+
+    def test_new_acp_harness_workflow_is_documented(self) -> None:
+        self.assertIn("## Adding A New ACP Harness", self.tech)
+        for phrase in [
+            "profile-and-evidence workflow",
+            "Add readiness diagnostics",
+            "Capture smoke evidence",
+            "Add adapter conformance fixtures",
+            "For Pi specifically",
+        ]:
+            self.assertIn(phrase, self.tech)
+        self.assertIn("adding a new ACP harness", self.todo)
+        self.assertIn("following the documented profile, readiness, smoke, fixture, and support-tier workflow", self.roadmap)
+        self.assertIn("To add another ACP harness such as Pi", self.readme)
 
 
 if __name__ == "__main__":

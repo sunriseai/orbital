@@ -48,6 +48,8 @@ class HarnessRegistry:
                 auth_missing = _claude_subscription_auth_missing(profile.command)
                 if auth_missing:
                     missing.append(auth_missing)
+            if profile.runtime_family == "claude_agent":
+                missing.extend(_claude_agent_acp_missing())
         elif profile.adapter == "api":
             if not profile.enabled:
                 missing.append("API profile must be explicitly enabled")
@@ -249,6 +251,45 @@ def _claude_subscription_auth_missing(command: list[str]) -> str | None:
     if payload.get("loggedIn") and payload.get("authMethod") != "api_key":
         return None
     return "Claude Code local subscription auth is not available without ANTHROPIC_API_KEY"
+
+
+def _claude_agent_acp_missing() -> list[str]:
+    missing: list[str] = []
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        missing.append("ANTHROPIC_API_KEY is not set")
+    node = shutil.which("node")
+    if node is None:
+        missing.append("node executable not found")
+        return missing
+    try:
+        result = subprocess.run(
+            [node, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        missing.append(f"node version check failed: {exc}")
+        return missing
+    version = (result.stdout or result.stderr).strip()
+    major = _node_major_version(version)
+    if major is None:
+        missing.append(f"could not parse node version: {version or 'unknown'}")
+    elif major < 22:
+        missing.append(f"node >= 22 required for claude-agent-acp; found {version}")
+    return missing
+
+
+def _node_major_version(version: str) -> int | None:
+    value = version.strip()
+    if value.startswith("v"):
+        value = value[1:]
+    head = value.split(".", 1)[0]
+    try:
+        return int(head)
+    except ValueError:
+        return None
 
 
 def _capability_map(capabilities: ProfileCapabilities) -> dict[str, bool]:

@@ -2,6 +2,29 @@
 
 This checklist turns the product, technical, and roadmap specs into executable work. Each item should be small enough to become an issue, PR, or delegated agent task.
 
+## Current Baseline
+
+Implemented and currently validated:
+
+- Root `README.md` contains the first-run get-started path, profile setup model, manual smoke script pointers, Claude Code CLI versus Claude Agent SDK ACP distinction, and the documented workflow for adding another ACP harness such as Pi.
+- Runtime profile templates separate `claude_code_cli_local` as the local/subscription Claude CLI fallback from `claude_agent_acp_api` as the explicit API-key-backed Claude Agent SDK ACP path.
+- `claude_agent_acp_api` is disabled by default, uses `claude-agent-acp`, requires `ANTHROPIC_API_KEY`, and has readiness diagnostics for the command, API key, and Node >= 22.
+- Default deterministic tests and fake ACP integration tests run unattended with no clicks, private credentials, network dependency, installed real harnesses, or real model calls.
+- The fake ACP harness covers successful runs, streamed text, tool events, stderr capture, exact usage, exact model metadata, permission approval and denial, malformed stdout, JSON-RPC errors, non-zero exits, failed checks, path policy evidence, follow-up messages, stop behavior, smoke CLI validation, and handoff/session repair workflows.
+- MCP stdio transport validation exercises tool listing, profile checks, fake task execution, primary-safe dialogue, and debug dialogue against the fake profile.
+- Optional packaging validation is gated by `ORBITAL_RUN_PACKAGING_SMOKE=1`.
+- Optional real-harness validation is gated by `ORBITAL_RUN_REAL_HARNESS_SMOKE=1`.
+- Manual local ACP smoke currently covers Codex and OpenCode as separate scripts under `tests/manual`; OpenCode smoke evidence recorded OpenCode `1.17.11` and ACP `protocolVersion=1`.
+- No real local Claude ACP subscription path has been verified. Claude ACP planning remains API-backed through the Claude Agent SDK until proven otherwise.
+- Smoke-verified real profiles remain `experimental_acp`; no real profile should be promoted to `known_good_acp` until adapter conformance fixtures and smoke evidence both pass.
+
+Current engineering focus:
+
+- Turn the fake ACP behavior into an explicit adapter conformance fixture matrix that can be reused when evaluating Codex, OpenCode, Pi, or Claude Agent SDK ACP.
+- Apply that matrix first to smoke-verified local Codex ACP and OpenCode ACP, because real ACP conformance is the next support-tier gate.
+- Keep `../ngitd-core` integration, richer SDLC/git attribution, and containerized sandbox enforcement as later layers unless an adapter-conformance task exposes a narrow prerequisite.
+- Keep the TODO below as the remaining implementation, hardening, and promotion backlog. Items that are already partially implemented should be treated as "finish, broaden, or lock down" work, not as absence of any code.
+
 ## 1. Project Identity And Rename
 
 - [ ] Choose final package, executable, config file, storage directory, and MCP server display names.
@@ -76,7 +99,7 @@ Tests:
 - [ ] Distinguish readiness, support tier, and capability gaps in all profile outputs.
 - [ ] Implement `recommend_harness_profiles` with deterministic ranking, reasons, caveats, matched tags, missing tags, matched capabilities, and missing capabilities.
 - [ ] Add first-class profile templates for OpenCode, Pi, Codex, Claude Code CLI, and Claude Agent SDK ACP with honest support tiers.
-- [ ] Replace any unverified local-subscription `claude_code_acp_local` profile with `claude_code_cli_local` plus disabled or explicit API-backed `claude_agent_acp_api`.
+- [ ] Preserve the Claude split: `claude_code_cli_local` is the local/subscription fallback, and `claude_agent_acp_api` is disabled or explicit API-backed ACP.
 - [ ] Document Claude ACP as `claude-agent-acp` through the Claude Agent SDK with `ANTHROPIC_API_KEY`, not as a Claude Code CLI subscription path.
 - [ ] Record current smoke evidence in profile metadata or docs: Codex local ACP manual smoke passed, OpenCode local ACP manual smoke passed with OpenCode `1.17.11` and ACP `protocolVersion=1`.
 - [ ] Keep smoke-verified profiles at `experimental_acp` until adapter conformance fixtures justify `known_good_acp`.
@@ -101,11 +124,16 @@ Tests:
 
 ## 5. ACP Adapters And Compatibility
 
-- [ ] Port or recreate the fake ACP harness strategy from Prole Harness MCP.
-- [ ] Define adapter conformance fixtures for initialization, session creation, prompt submission, streamed text, tool events, permissions, stderr, stop/cancel, exact usage, exact model metadata, and malformed events.
+- [ ] Maintain the fake ACP harness as the canonical local conformance fixture and extend it only when a real ACP harness exposes a new protocol shape we need to normalize.
+- [ ] Define reusable adapter conformance fixtures for initialization, session creation, prompt submission, streamed text, tool events, permissions, stderr, stop/cancel, exact usage, exact model metadata, and malformed events.
+- [ ] Keep `tests/test_validation_acp_conformance.py` focused on observable adapter evidence: transcript send/receive lines, primary-safe filtering, raw debug payloads, permission option IDs, stderr capture, usage, and model metadata.
+- [ ] Add a Codex ACP conformance fixture from captured local smoke transcripts or a deterministic replay harness.
+- [ ] Add an OpenCode ACP conformance fixture from captured local smoke transcripts or a deterministic replay harness.
+- [ ] Define the promotion checklist that moves a real profile from `experimental_acp` to `known_good_acp`: readiness diagnostics, manual smoke evidence, conformance fixture pass, documented capability gaps, and regression tests.
 - [ ] Normalize ACP event shapes across supported harnesses into one event vocabulary.
 - [ ] Keep raw protocol payloads in debug logs, not primary-safe summaries.
 - [ ] Label no profile `known_good_acp` without conformance fixture coverage and a smoke run.
+- [ ] Document the repeatable workflow for adding a new ACP harness: profile template, readiness diagnostics, manual smoke evidence, deterministic tests, adapter conformance fixtures, and support-tier promotion.
 - [ ] Keep CLI compatibility only where ACP is unavailable or unreliable.
 - [ ] Treat Claude Code CLI as the local/subscription Claude path until a local-subscription ACP command is verified.
 - [ ] Treat Claude Agent SDK ACP as API-key/metered via `claude-agent-acp`.
@@ -116,11 +144,14 @@ Acceptance criteria:
 - Primary harnesses do not need runtime-specific ACP knowledge.
 - Adapter capability gaps are visible before a run starts.
 - Known-good support claims are backed by fixtures and smoke evidence.
+- Codex and OpenCode remain `experimental_acp` until their real-harness conformance evidence exists.
+- A new harness such as Pi can start as a conservative profile template and graduate only after readiness, smoke, and conformance evidence exists.
 
 Tests:
 
 - Fake ACP integration tests.
-- Fixture tests for each supported runtime family.
+- Adapter conformance fixture tests for each supported runtime family before support-tier promotion.
+- Regression tests for new-harness profile templates, readiness diagnostics, recommendation caveats, and support-tier promotion rules.
 - Regression tests for permission option matching and malformed ACP payloads.
 - Smoke tests for each profile that can be exercised locally.
 - Smoke tests should cover local Codex ACP and OpenCode ACP separately from API-backed Claude Agent ACP.
@@ -132,7 +163,7 @@ Tests:
 - [ ] Capture normalized dialogue, tool timeline, permissions, stderr, transcript references, check evidence, warning details, and failure classifications.
 - [ ] Implement deterministic policy verdicts: `accept_candidate`, `needs_repair`, `reject`, `blocked`, and `requires_primary_review`.
 - [ ] Generate repair seeds from server-observed gaps while preserving task scope, checks, and acceptance hints.
-- [ ] Add fallback file attribution until `../ngitd-core` integration exists.
+- [ ] Keep fallback file attribution explicit until later `../ngitd-core` integration exists.
 - [ ] Distinguish pre-existing dirty files, files changed during run, possibly concurrent changes, untracked files, deletes, renames, generated artifacts, and unknown attribution.
 - [ ] Add attribution confidence values: `high`, `medium`, `low`, and `unknown`.
 
@@ -241,8 +272,8 @@ Tests:
 
 ## 11. CI-Safe Validation Suites
 
-- [ ] Treat deterministic unit/regression tests and fake-harness integration tests as first-class CI gates.
-- [ ] Ensure default validation runs unattended with no clicks, browser interaction, private credentials, network dependency, real model calls, or installed real harnesses.
+- [ ] Keep deterministic unit/regression tests and fake-harness integration tests as first-class CI gates.
+- [ ] Keep default validation unattended with no clicks, browser interaction, private credentials, network dependency, real model calls, or installed real harnesses.
 - [ ] Keep optional real-harness smoke experiments outside the default suite and gated by explicit environment variables.
 - [ ] Add deterministic tests for config/schema defaults, support tiers, profile classification, disabled profiles, and metered profile opt-in.
 - [ ] Add deterministic tests for profile recommendation determinism, tie-breaking, caveats, missing capabilities, and explicit selection behavior.
@@ -250,16 +281,16 @@ Tests:
 - [ ] Add deterministic MCP/service contract tests for primary-safe responses, debug responses, stable errors, schema versions, and canonical statuses.
 - [ ] Add deterministic tests for permission normalization, policy verdicts, restart visibility, and approval/denial option selection.
 - [ ] Add deterministic tests for run evidence, startup prompt boundaries, no-op pass warnings, requested checks, path policy, attribution confidence, liveness, telemetry, reports, and handoff/session state transitions.
-- [ ] Add fake ACP scenarios for happy-path runs, streamed text, tool events, stderr, exact usage, exact model metadata, permission approval, permission denial, malformed stdout, failed results, hung workers, failed checks, forbidden commands, forbidden path writes, outside-allowed-path writes, stop behavior, and session repair workflows.
-- [ ] Add a test-only fake profile smoke path so `orbital_mcp.smoke` can be validated unattended from a local config fixture.
+- [ ] Keep fake ACP scenarios for happy-path runs, streamed text, tool events, stderr, exact usage, exact model metadata, permission approval, permission denial, malformed stdout, failed results, hung workers, failed checks, forbidden commands, forbidden path writes, outside-allowed-path writes, stop behavior, and session repair workflows.
+- [ ] Keep the test-only fake profile smoke path so `orbital_mcp.smoke` can be validated unattended from a local config fixture.
 - [ ] Keep fake-harness tests limited to local fixture processes, temporary workdirs, and `.orbital` stores that are cleaned after each test.
 - [ ] Add MCP contract tests for tool response envelopes, `ok_response` and `error_response` shape, primary-safe defaults, debug access flags, schema versions, and canonical status fields.
 - [ ] Add fake ACP failure-mode tests for non-zero worker exit, JSON-RPC error responses, ambiguous permission options, follow-up messages through `send_task_message`, and cooperative cancel versus forced termination evidence.
 - [ ] Add storage durability tests for malformed or partial final reports, append-only permission latest-state reads, and session warning persistence across service restart.
-- [ ] Add package/CLI validation that distinguishes source-tree execution from installed-package execution and records any packaging gap explicitly.
-- [ ] Add default MCP stdio transport validation for tool listing, profile checks, fake task execution, primary-safe dialogue, and debug dialogue.
-- [ ] Add optional installed-package validation gated by `ORBITAL_RUN_PACKAGING_SMOKE=1`.
-- [ ] Add optional real-harness validation gated by `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` and selected profile IDs.
+- [ ] Keep package/CLI validation that distinguishes source-tree execution from installed-package execution and records any packaging gap explicitly.
+- [ ] Keep default MCP stdio transport validation for tool listing, profile checks, fake task execution, primary-safe dialogue, and debug dialogue.
+- [ ] Keep optional installed-package validation gated by `ORBITAL_RUN_PACKAGING_SMOKE=1`.
+- [ ] Keep optional real-harness validation gated by `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` and selected profile IDs.
 - [ ] Keep default optional real-harness validation focused on local/subscription ACP profiles that do not require API keys.
 - [ ] Add a separate API-backed Claude Agent ACP smoke path gated by explicit profile selection and `ANTHROPIC_API_KEY`.
 
@@ -286,19 +317,25 @@ Tests:
 
 ## Claude Profile Alignment Workplan
 
-1. Replace the runtime profile template named `claude_code_acp_local` with `claude_agent_acp_api`.
-2. Configure `claude_agent_acp_api` as `adapter=acp`, `runtime_family=claude_agent`, `command=["claude-agent-acp"]`, `auth_mode=api_key`, `cost_posture=metered_api`, and disabled or explicit opt-in by default.
-3. Keep `claude_code_cli_local` as `adapter=cli`, `runtime_family=claude_code`, `command=["claude"]`, `auth_mode=local_subscription`, `cost_posture=subscription_preferred`, and `support.tier=cli_fallback`.
-4. Update readiness diagnostics so `claude_agent_acp_api` checks for Node >= 22, `claude-agent-acp`, and `ANTHROPIC_API_KEY`, while `claude_code_cli_local` checks for `claude`.
-5. Update profile recommendation rules so the metered Claude Agent ACP profile is never selected implicitly.
-6. Add a Claude Agent ACP manual smoke script only after `claude_agent_acp_api` exists and readiness diagnostics can distinguish missing Node, missing `claude-agent-acp`, and missing `ANTHROPIC_API_KEY`; keep Codex/OpenCode as the only active local ACP manual scripts until then.
-7. Add or update regression tests for profile defaults, readiness diagnostics, metered opt-in, recommendation caveats, and manual smoke command naming.
-8. Run deterministic suite, packaging smoke, and local Codex/OpenCode manual smoke now; add explicit Claude Agent ACP manual smoke later only when API credentials are intentionally provided and the profile is implemented.
+Completed alignment:
+
+1. Replaced the runtime profile template named `claude_code_acp_local` with `claude_agent_acp_api`.
+2. Configured `claude_agent_acp_api` as `adapter=acp`, `runtime_family=claude_agent`, `command=["claude-agent-acp"]`, `auth_mode=api_key`, `cost_posture=metered_api`, and disabled by default.
+3. Kept `claude_code_cli_local` as `adapter=cli`, `runtime_family=claude_code`, `command=["claude"]`, `auth_mode=local_subscription`, `cost_posture=subscription_preferred`, and `support.tier=cli_fallback`.
+4. Added readiness diagnostics so `claude_agent_acp_api` checks for Node >= 22, `claude-agent-acp`, and `ANTHROPIC_API_KEY`.
+5. Added regression tests for profile defaults, readiness diagnostics, metered opt-in, recommendation caveats, and docs alignment.
+
+Remaining Claude Agent ACP work:
+
+1. Verify the actual `claude-agent-acp` install path and API-key smoke behavior.
+2. Add a Claude Agent ACP manual smoke script only after setup is verified; keep Codex/OpenCode as the only active local ACP manual scripts until then.
+3. Add explicit Claude Agent ACP real-harness smoke only when API credentials are intentionally provided.
 
 ## Deferred
 
 - Hosted or multi-user service.
 - Hard sandboxing before an actual sandbox or container mode exists.
+- `../ngitd-core` integration and richer SDLC/git attribution.
 - Automatic product acceptance.
 - Benchmark scoring as a first-class product feature.
 - SDLC-specific issue, branch, PR, CI, release, sprint, epic, owner, or team policy layers.

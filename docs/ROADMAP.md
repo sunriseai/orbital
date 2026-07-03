@@ -71,7 +71,7 @@ Exit criteria:
 
 ## Phase 3: ACP Adapter Hardening
 
-Goal: make ACP the main adapter contract across supported harnesses.
+Goal: make ACP conformance the main trust gate for supported secondary coding agents.
 
 Deliverables:
 
@@ -85,12 +85,14 @@ Deliverables:
 - Port or recreate the fake ACP harness strategy from Prole Harness MCP.
 - Add fixture coverage for malformed events, unknown event shapes, permission option matching, exact telemetry, stderr, and stop behavior.
 - Mark each profile's support tier from fixture and smoke-run evidence.
+- Use fake ACP conformance as the local baseline, then add real-harness conformance fixtures for Codex and OpenCode before considering either profile known-good.
+- Keep richer Git/SDLC attribution and stronger sandbox execution out of this phase unless a conformance fixture requires a narrow supporting change.
 
 Exit criteria:
 
 - Each supported ACP harness can pass a smoke run.
 - Manual local ACP smoke currently covers Codex and OpenCode; OpenCode smoke records OpenCode `1.17.11` and ACP `protocolVersion=1`.
-- Claude Agent SDK ACP remains planned API-backed work until `claude_agent_acp_api` exists and passes explicit API-key smoke.
+- Claude Agent SDK ACP exists as disabled API-backed profile metadata, but remains unverified until it passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.
 - Primary harnesses do not need runtime-specific ACP knowledge.
 - No runtime family is labeled `known_good_acp` without conformance fixture coverage.
@@ -133,12 +135,13 @@ Deliverables:
 - Release checklist.
 - Host contract documentation that distinguishes prompt-driven worker behavior from server-driven evidence.
 - Documentation for support tiers, capability gaps, and adapter fallback expectations.
+- Documentation for adding a new ACP harness, including profile template, readiness diagnostics, smoke evidence, conformance fixtures, and support-tier promotion criteria.
 - Documentation for recovery behavior after process restart or partial storage corruption.
 - Documentation for primary-safe versus debug/raw data surfaces.
 
 Exit criteria:
 
-- A contributor can add a new ACP harness profile or adapter fixture without reading the whole codebase.
+- A contributor can add a new ACP harness profile or adapter fixture by following the documented profile, readiness, smoke, fixture, and support-tier workflow.
 - A user can diagnose setup failures without asking for internal support.
 
 ## Phase 6: Quality And Reliability
@@ -150,7 +153,6 @@ Deliverables:
 - Stronger policy verdict coverage.
 - Better check evidence extraction.
 - More robust file attribution for dirty workdirs.
-- Integration planning for `../ngitd-core` as the long-term extended Git data source.
 - Improved liveness with optional model log adapters.
 - Better permission option matching and audit output.
 - Golden test fixtures for realistic ACP transcripts.
@@ -164,6 +166,17 @@ Exit criteria:
 - Primary-safe summaries are reliable enough for ordinary control flow.
 - Raw transcript inspection is only needed for ambiguous or debug cases.
 - Recovery diagnostics are clear enough that primary harnesses can choose repair, retry, or manual inspection.
+
+## Later: Richer Git And Execution Controls
+
+These are valuable, but they should build on a trusted delegation layer rather than define the initial product wedge.
+
+Possible later work:
+
+- Integration planning for `../ngitd-core` as the long-term extended Git data source.
+- Rich dirty-workdir history, branch/commit metadata, and cross-run file attribution.
+- Containerized or sandboxed execution modes for stronger filesystem, network, and process enforcement.
+- Higher-level management or prompt-policy overlays for teams that want stricter approval workflows.
 
 ## Later: SDLC Layer
 

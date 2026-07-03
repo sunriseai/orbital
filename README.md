@@ -1,6 +1,12 @@
 # Orbital
 
-Orbital is a local MCP server for coordinating secondary coding harnesses from a primary harness. It gives the primary harness a stable control surface for profile selection, ACP/CLI adapter launch, permission mediation, evidence capture, liveness checks, file attribution, and structured handoff sessions.
+<p>
+  <img src="assets/orbital_logo.svg" alt="Orbital logo" width="120">
+</p>
+
+Orbital is an MCP delegation layer for running, supervising, and reviewing secondary coding agents.
+
+It runs locally and gives the primary harness a stable control surface for profile selection, ACP/CLI adapter launch, permission mediation, evidence capture, liveness checks, file attribution, and structured handoff sessions.
 
 The current implementation is intentionally CI-safe to validate: the default tests use local fake harnesses and do not require clicks, credentials, network access, real model calls, or installed real harnesses.
 
@@ -10,7 +16,7 @@ Prerequisites:
 
 - Python 3.11 or newer.
 - A shell in the repository root.
-- Optional: a real ACP-capable harness such as Codex or OpenCode for manual local ACP smoke tests. Claude Code CLI is currently represented as a CLI fallback; Claude ACP should use the Claude Agent SDK adapter and API-key auth when that profile is added. The default test suite does not need a real harness.
+- Optional: a real ACP-capable harness such as Codex or OpenCode for manual local ACP smoke tests. Claude Code CLI is represented as a CLI fallback; Claude Agent SDK ACP is represented as a disabled, API-backed profile that requires explicit setup. The default test suite does not need a real harness.
 
 Install for local development:
 
@@ -39,7 +45,7 @@ ORBITAL_RUN_PACKAGING_SMOKE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest disc
 ORBITAL_RUN_REAL_HARNESS_SMOKE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_validation_optional_smoke.py -v
 ```
 
-The default suite includes a real MCP stdio transport smoke against the local fake harness. `ORBITAL_RUN_PACKAGING_SMOKE=1` additionally creates a temporary virtualenv, installs Orbital from a copied source tree, and verifies the installed console scripts. `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` defaults to trying `codex_acp_local` and `opencode_acp_local`, skipping profiles that `orbital doctor` reports as not ready. Set `ORBITAL_REAL_HARNESS_PROFILES=<profile[,profile]>` to narrow or override that list. Claude ACP should be tested through an explicit API-backed `claude_agent_acp_api` profile once implemented, not through a local-subscription Claude Code ACP profile.
+The default suite includes a real MCP stdio transport smoke against the local fake harness. `ORBITAL_RUN_PACKAGING_SMOKE=1` additionally creates a temporary virtualenv, installs Orbital from a copied source tree, and verifies the installed console scripts. `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` defaults to trying `codex_acp_local` and `opencode_acp_local`, skipping profiles that `orbital doctor` reports as not ready. Set `ORBITAL_REAL_HARNESS_PROFILES=<profile[,profile]>` to narrow or override that list. Claude ACP should be tested through explicit API-backed `claude_agent_acp_api` setup, not through a local-subscription Claude Code ACP profile.
 
 Run manual smoke wrappers when you want a timestamped log under `tests/manual/logs/`:
 
@@ -49,7 +55,16 @@ Run manual smoke wrappers when you want a timestamped log under `tests/manual/lo
 ./tests/manual/run_manual_local_opencode_acp_smoke.sh
 ```
 
-`run_manual_faux_harness_smoke.sh` stays CI-safe and uses fake harnesses. The `run_manual_local_*_acp_smoke.sh` scripts each target one installed/authenticated local ACP harness and may launch a real Codex or OpenCode worker. The OpenCode script also records `opencode --version`, `opencode acp --help`, and an ACP initialize handshake before the smoke task. Claude Agent SDK ACP smoke should be added here only after the API-backed `claude_agent_acp_api` profile exists and has a verified setup path. Each script prints its scope and prerequisites before running.
+`run_manual_faux_harness_smoke.sh` stays CI-safe and uses fake harnesses. The `run_manual_local_*_acp_smoke.sh` scripts each target one installed/authenticated local ACP harness and may launch a real Codex or OpenCode worker. The OpenCode script also records `opencode --version`, `opencode acp --help`, and an ACP initialize handshake before the smoke task. Claude Agent SDK ACP smoke should be added here only after `claude_agent_acp_api` has a verified API-key setup path. Each script prints its scope and prerequisites before running.
+
+### Claude Support
+
+Claude support is split intentionally:
+
+- `claude_code_cli_local` is the local Claude Code CLI fallback. It uses the `claude` command and local Claude Code authentication, but it is not an ACP profile.
+- `claude_agent_acp_api` is the planned ACP path. It uses the Claude Agent SDK ACP adapter through `claude-agent-acp`, requires `ANTHROPIC_API_KEY`, and is treated as metered API usage.
+
+The [Claude Agent SDK docs](https://code.claude.com/docs/en/agent-sdk/overview) describe API-key setup with `ANTHROPIC_API_KEY` and state that SDK-built third-party agents should use API-key authentication rather than claude.ai login/rate limits. The ACP agents list includes the Claude Agent adapter as [`claude-agent-acp`](https://agentclientprotocol.com/get-started/agents). Orbital should not imply a local-subscription Claude ACP path unless a supported local ACP adapter is verified.
 
 Inspect the local setup:
 
@@ -100,9 +115,11 @@ Core documents:
 - [Roadmap](docs/ROADMAP.md): phased rebuild plan from the current sketch to an open source Orbital MCP.
 - [Implementation TODO](docs/TODO.md): execution checklist for turning the specs into buildable tasks.
 
+To add another ACP harness such as Pi, start with the [Technical Spec](docs/TECH_SPEC.md) section on adding a new ACP harness. New harnesses should begin as conservative profile templates, then earn `experimental_acp` or `known_good_acp` through readiness diagnostics, manual smoke evidence, deterministic tests, and adapter conformance fixtures.
+
 ## Positioning
 
-Orbital is not an SDLC platform yet. It is the local routing and control layer for multi-harness coding delegation.
+Orbital is not an SDLC platform yet. It is an MCP delegation layer for running, supervising, and reviewing secondary coding agents.
 
 The product center is:
 

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Orbital is an open source MCP server for connecting a primary coding harness to multiple secondary coding harnesses through ACP.
+Orbital is an MCP delegation layer for running, supervising, and reviewing secondary coding agents.
 
 The user installs Orbital locally, configures one or more harness profiles, classifies those profiles by the kinds of tasks they are good at, and lets the primary harness delegate bounded work to the right secondary worker through a normalized MCP interface. Orbital owns process launch, protocol adaptation, permissions, run evidence, file attribution, and structured handoff data. The primary harness owns planning, task judgment, profile choice, and final acceptance.
 
@@ -28,6 +28,7 @@ Rework these first-draft weaknesses:
 - Define restart and recovery behavior for active runs, interrupted processes, partial logs, and pending permissions before users depend on them.
 - Move from binary command blocking toward capability-based safety: prompt-only, adapter-mediated, process-observed, and sandbox-enforced.
 - Keep public docs focused on MCP-to-ACP delegation. Benchmark, playbook, and SDLC language can exist as examples or later layers, but should not define the core product surface.
+- Treat real ACP harness conformance as the central near-term product hardening work. Richer Git/SDLC integration and stronger sandbox execution can build on the delegation layer later, but they should not displace adapter trust as the V1 wedge.
 
 ## Product Goals
 
@@ -256,4 +257,4 @@ The session model should preserve the first draft's useful operating loop:
 - Should profile selection by classification be a dedicated MCP tool, or folded into `start_task_run`?
 - What is the minimum handoff/session tool contract needed for v1 without importing SDLC-specific workflow semantics?
 - What should the package, executable, and storage names be after the Orbital rename?
-- What container or sandbox mode should Orbital support later for stronger command policy enforcement?
+- What container or sandbox mode should Orbital support later if stronger command policy enforcement becomes part of a higher-assurance deployment mode?

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Orbital should be a local MCP server with ACP-first harness adapters. It provides a stable tool surface for primary harnesses and a profile registry for secondary harnesses. The current repository already sketches many useful primitives; Orbital should keep the strongest ones while simplifying the product contract around multi-harness ACP delegation.
+Orbital is an MCP delegation layer for running, supervising, and reviewing secondary coding agents. It should be a local MCP server with ACP-first harness adapters, a stable tool surface for primary harnesses, and a profile registry for secondary harnesses. The current repository already sketches many useful primitives; Orbital should keep the strongest ones while simplifying the product contract around multi-harness ACP delegation.
 
 ## Architecture
 
@@ -162,7 +162,7 @@ Current local smoke evidence:
 - `codex_acp_local`: manual local ACP smoke passed through `codex-acp` using local subscription auth.
 - `opencode_acp_local`: manual local ACP smoke passed through `opencode acp --pure`; preflight recorded OpenCode `1.17.11` and ACP `protocolVersion=1`.
 - `claude_code_cli_local`: local/subscription Claude path is CLI fallback through `claude`, not ACP.
-- `claude_agent_acp_api`: planned API-backed ACP profile via `claude-agent-acp`; not implemented or smoke-verified yet.
+- `claude_agent_acp_api`: disabled API-backed ACP profile via `claude-agent-acp`; explicit setup is required and it is not smoke-verified yet.
 
 Smoke evidence is necessary but not sufficient for `known_good_acp`. A profile remains `experimental_acp` until adapter conformance fixtures cover initialization, prompt submission, event normalization, permissions, stop/cancel behavior, stderr, and telemetry expectations.
 
@@ -373,6 +373,24 @@ Each supported runtime family should have fixture transcripts or fake harnesses 
 
 A profile should not be labeled `known_good_acp` until its adapter passes conformance fixtures and at least one smoke run.
 
+Near-term adapter hardening should focus on turning the current fake ACP conformance baseline into reusable real-harness checks. Codex and OpenCode are the first practical targets because local smoke has already passed for both. Pi and Claude Agent SDK ACP should follow the same profile, readiness, smoke, fixture, and support-tier workflow once their setup paths are verified.
+
+## Adding A New ACP Harness
+
+Adding a harness such as Pi should be treated as a profile-and-evidence workflow, not just as a command string. The minimum path is:
+
+1. Confirm the harness exposes an ACP-compatible command or adapter, such as `pi acp`, `pi-agent-acp`, or another documented entrypoint.
+2. Add a disabled or explicit profile template with stable `id`, `display_name`, `runtime_family`, `adapter=acp`, `command`, `auth_mode`, `cost_posture`, `capabilities`, `classification`, and `support.tier`.
+3. Keep the first support tier conservative: use `profile_template` when command/auth semantics are unverified, and `experimental_acp` only after local readiness plus smoke evidence exists.
+4. Add readiness diagnostics for every setup prerequisite: executable availability, required runtime versions, auth state, API keys, local subscription state, model/provider config, and safe handshake checks when possible.
+5. Add a manual smoke wrapper only after readiness can produce actionable diagnostics and the smoke does not require hidden setup.
+6. Capture smoke evidence in the log: command path, command version, ACP `initialize` response, protocol version, selected profile, status, changed files, warnings, permissions, policy violations, and token/model telemetry availability.
+7. Add adapter conformance fixtures before promoting beyond `experimental_acp`. Fixtures should cover initialization, session creation, prompt submission, streamed text, tool events, permission requests, stderr, stop/cancel behavior, exact usage/model metadata when exposed, and malformed payloads.
+8. Add deterministic tests for profile defaults, config parsing, readiness diagnostics, recommendation caveats, metered/API opt-in, and support-tier behavior.
+9. Update README/manual smoke docs only for harnesses users can reasonably exercise. Keep unverified harnesses documented as templates or planned work.
+
+For Pi specifically, the open questions are the ACP command name, whether auth is local subscription or API key, whether ACP emits permissions/tool events/usage, and which protocol version and capability fields appear in `initialize`.
+
 Compatibility adapters:
 
 CLI adapters can remain valuable, but they must explicitly report weaker capabilities. For example, a CLI fallback may provide dialogue and tool-ish stream parsing while lacking interactive permission mediation, continued dialogue, or exact usage telemetry.
@@ -448,7 +466,7 @@ Evidence should include:
 - permission counts
 - policy violations
 
-File attribution should eventually integrate with `../ngitd-core` for extended Git state capture and richer dirty-workdir management. Until that integration exists, Orbital should define and test a simpler fallback:
+File attribution should stay fallback-level in the core delegation layer. Orbital should eventually integrate with `../ngitd-core` for extended Git state capture and richer dirty-workdir management, but that belongs after the ACP delegation layer is trustworthy. Until that integration exists, Orbital should define and test a simpler fallback:
 
 - require a readable workdir
 - detect whether the workdir is a Git repository
@@ -558,7 +576,7 @@ Policy enforcement levels:
 - `process_observed`: Orbital can observe process state, output, and some command evidence but cannot guarantee prevention.
 - `sandbox_enforced`: Orbital runs the worker in an actual sandbox or container and can enforce filesystem, network, or process limits.
 
-The default local open source mode should be honest about the active enforcement level. A future containerized mode can support stronger defaults for package installs, network use, destructive commands, and path isolation.
+The default local open source mode should be honest about the active enforcement level. Stronger containerized or sandboxed execution is useful, but it is a later deployment/control layer rather than the core V1 product wedge.
 
 Permission decisions:
 
@@ -668,8 +686,8 @@ Rework:
 
 - rename package, commands, config, and storage from Prole Harness to Orbital
 - make classification part of profiles
-- add Pi ACP profile support
-- replace the unverified `claude_code_acp_local` profile template with `claude_code_cli_local` plus disabled or explicit `claude_agent_acp_api`
+- add real ACP conformance fixtures for smoke-verified Codex and OpenCode profiles, then apply the same workflow to Pi and API-backed Claude Agent SDK ACP
+- maintain the Claude split: `claude_code_cli_local` for local/subscription CLI fallback, and disabled or explicit `claude_agent_acp_api` for API-backed ACP
 - reduce benchmark/playbook language in public docs
 - separate generic handoff sessions from later SDLC workflows
 - simplify install and setup docs for open source adoption
@@ -681,7 +699,8 @@ Rework:
 Defer:
 
 - hosted multi-user service
-- hard sandboxing
+- hard sandboxing or containerized execution modes
+- `../ngitd-core` integration and richer SDLC/git attribution
 - automatic product acceptance
 - benchmark scoring as a first-class product feature
 - SDLC-specific ticket, release, and CI policy layers

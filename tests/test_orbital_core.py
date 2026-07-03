@@ -4,6 +4,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,58 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertEqual(profile.classification.locality, "subscription")
         self.assertEqual(profile.support.tier, "experimental_acp")
         self.assertEqual(config.storage_root, ".orbital")
+
+    def test_default_profiles_separate_claude_cli_from_api_backed_agent_acp(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+        profile_ids = {item.id for item in config.profiles}
+
+        self.assertNotIn("claude_code_acp_local", profile_ids)
+
+        cli = next(item for item in config.profiles if item.id == "claude_code_cli_local")
+        self.assertEqual(cli.adapter, "cli")
+        self.assertEqual(cli.runtime_family, "claude_code")
+        self.assertEqual(cli.command, ["claude"])
+        self.assertEqual(cli.auth_mode, "local_subscription")
+        self.assertEqual(cli.cost_posture, "subscription_preferred")
+        self.assertEqual(cli.support.tier, "cli_fallback")
+
+        acp = next(item for item in config.profiles if item.id == "claude_agent_acp_api")
+        self.assertEqual(acp.adapter, "acp")
+        self.assertEqual(acp.runtime_family, "claude_agent")
+        self.assertEqual(acp.command, ["claude-agent-acp"])
+        self.assertEqual(acp.auth_mode, "api_key")
+        self.assertEqual(acp.cost_posture, "metered_api")
+        self.assertFalse(acp.enabled)
+        self.assertTrue(acp.metered_api)
+        self.assertEqual(acp.support.tier, "profile_template")
+
+    def test_claude_agent_acp_readiness_requires_explicit_setup(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+        registry = HarnessRegistry(config)
+        profile = next(item for item in config.profiles if item.id == "claude_agent_acp_api")
+
+        with patch.dict("os.environ", {}, clear=True):
+            readiness = registry.readiness(profile, ROOT)
+
+        self.assertFalse(readiness.ready)
+        self.assertIn("profile disabled", readiness.missing_prerequisites)
+        self.assertIn("ANTHROPIC_API_KEY is not set", readiness.missing_prerequisites)
+
+    def test_claude_agent_acp_is_never_recommended_without_explicit_opt_in(self) -> None:
+        registry = HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist")))
+
+        result = registry.recommend(
+            task_tags=["implementation"],
+            required_capabilities=["dialogue"],
+            locality="metered_api",
+            cost_preference="metered_api",
+            include_not_ready=True,
+        )
+
+        claude_agent = next(item for item in result["recommendations"] if item["profile_id"] == "claude_agent_acp_api")
+        self.assertFalse(claude_agent["eligible"])
+        self.assertIn("profile disabled", claude_agent["caveats"])
+        self.assertIn("metered API profile requires explicit opt-in", claude_agent["caveats"])
 
     def test_custom_config_parses_profile_metadata(self) -> None:
         tmp = ROOT / ".tmp-test-config"
