@@ -148,6 +148,10 @@ class HarnessRegistry:
                 score -= 100
             if missing_tags:
                 score -= len(missing_tags) * 3
+            locality_match = bool(locality and profile.classification.locality == locality)
+            cost_match = bool(cost_preference and profile.classification.cost_preference == cost_preference)
+            support_tier_caveats = [item for item in caveats if item.startswith("support tier disallowed:")]
+            readiness_blockers = list(readiness.missing_prerequisites)
 
             recommendations.append(
                 {
@@ -162,8 +166,30 @@ class HarnessRegistry:
                     "locality": profile.classification.locality,
                     "score": score,
                     "eligible": eligible,
-                    "reasons": _recommendation_reasons(profile, matched_tags, matched_capabilities),
+                    "reasons": _recommendation_reasons(
+                        profile,
+                        matched_tags,
+                        matched_capabilities,
+                        locality_match=locality_match,
+                        cost_match=cost_match,
+                    ),
                     "caveats": caveats,
+                    "recommendation_factors": {
+                        "matched_tags": matched_tags,
+                        "missing_tags": missing_tags,
+                        "matched_capabilities": matched_capabilities,
+                        "missing_capabilities": missing_capabilities,
+                        "locality_requested": locality,
+                        "locality_actual": profile.classification.locality,
+                        "locality_match": locality_match if locality else None,
+                        "cost_preference_requested": cost_preference,
+                        "cost_preference_actual": profile.classification.cost_preference,
+                        "cost_preference_match": cost_match if cost_preference else None,
+                        "support_tier": profile.support.tier,
+                        "support_tier_caveats": support_tier_caveats,
+                        "readiness_blockers": readiness_blockers,
+                        "capability_gaps": missing_capabilities,
+                    },
                     "profile": to_jsonable(profile),
                     "readiness": to_jsonable(readiness),
                     "normalized_capabilities": to_jsonable(capabilities),
@@ -316,12 +342,19 @@ def _recommendation_reasons(
     profile: HarnessProfile,
     matched_tags: list[str],
     matched_capabilities: list[str],
+    *,
+    locality_match: bool = False,
+    cost_match: bool = False,
 ) -> list[str]:
     reasons = [f"support tier: {profile.support.tier}"]
     if matched_tags:
         reasons.append("matched task tags: " + ", ".join(matched_tags))
     if matched_capabilities:
         reasons.append("matched capabilities: " + ", ".join(matched_capabilities))
+    if locality_match:
+        reasons.append(f"locality match: {profile.classification.locality}")
+    if cost_match:
+        reasons.append(f"cost preference match: {profile.classification.cost_preference}")
     if profile.classification.strengths:
         reasons.append("strengths: " + "; ".join(profile.classification.strengths[:2]))
     return reasons

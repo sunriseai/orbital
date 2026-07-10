@@ -61,7 +61,7 @@ def write_fake_acp_config(base_dir: Path) -> None:
 
 
 async def wait_for_permission(service: TaskRunService, run_id: str) -> str:
-    for _ in range(80):
+    for _ in range(240):
         summary = service.get_run_summary(run_id)
         pending = summary.get("pending_permission_requests") or []
         if pending:

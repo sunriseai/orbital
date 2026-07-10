@@ -78,6 +78,51 @@ class DeterministicValidationTests(unittest.TestCase):
         finally:
             remove_tree(tmp)
 
+    def test_prose_only_completion_is_repair_needed_evidence_gap(self) -> None:
+        tmp = ROOT / ".tmp-test-validation-evidence-gap"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-validation-evidence-gap", tmp, status="completed")
+        run.last_agent_message = "Done. Everything is complete."
+        try:
+            store.create_run(run)
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+
+            summary = service.get_run_summary(run.run_id)
+            digest = service.get_run_status_digest(run.run_id)
+            verdict = service.get_run_policy_verdict(run.run_id)
+            warning_codes = {warning["code"] for warning in summary["warning_details"]}
+
+            self.assertEqual(summary["evidence_status"], "repair_needed")
+            self.assertLess(summary["evidence_score"], 100)
+            self.assertIn("no_changed_files", warning_codes)
+            self.assertIn("no_completed_tool_calls", warning_codes)
+            self.assertIn("worker_claim_without_evidence", warning_codes)
+            self.assertIn("worker_claim_without_evidence", summary["failure_classification"])
+            self.assertEqual(digest["evidence_status"], "repair_needed")
+            self.assertEqual(verdict["policy_verdict"], "needs_repair")
+            self.assertEqual(verdict["repair_seed"]["title"], f"Repair {run.run_id}")
+        finally:
+            remove_tree(tmp)
+
+    def test_missing_requested_check_uses_stable_evidence_gap_code(self) -> None:
+        tmp = ROOT / ".tmp-test-validation-missing-check"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-validation-missing-check", tmp, status="completed")
+        run.task = TaskInput(title="Task", objective="Do work", checks=["python3 -m pytest -q"])
+        try:
+            store.create_run(run)
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+
+            summary = service.get_run_summary(run.run_id)
+            warning_codes = {warning["code"] for warning in summary["warning_details"]}
+
+            self.assertIn("missing_requested_check", warning_codes)
+            self.assertNotIn("requested_check_missing", warning_codes)
+            self.assertIn("missing_requested_check", summary["failure_classification"])
+            self.assertEqual(summary["evidence"]["checks"][0]["status"], "missing")
+        finally:
+            remove_tree(tmp)
+
     def test_liveness_stop_safe_requires_quiet_past_threshold_without_process_or_permission(self) -> None:
         tmp = ROOT / ".tmp-test-validation-liveness"
         store = RunStore(tmp / ".orbital")

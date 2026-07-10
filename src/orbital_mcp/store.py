@@ -15,7 +15,6 @@ from .models import (
     TaskRun,
     to_jsonable,
 )
-from .telemetry import PrimaryTokenUsageRecord
 
 
 class RunStore:
@@ -95,39 +94,6 @@ class RunStore:
                 continue
         return sessions
 
-    def append_primary_token_usage(self, session_id: str, record: PrimaryTokenUsageRecord) -> None:
-        self.load_session(session_id)
-        path = self.session_dir(session_id) / "primary_token_usage.jsonl"
-        with _file_lock(path.parent / ".lock"):
-            with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(to_jsonable(record), sort_keys=True) + "\n")
-
-    def read_primary_token_usage(self, session_id: str) -> list[PrimaryTokenUsageRecord]:
-        self.load_session(session_id)
-        path = self.session_dir(session_id) / "primary_token_usage.jsonl"
-        if not path.exists():
-            return []
-        records: list[PrimaryTokenUsageRecord] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            value = json.loads(line)
-            records.append(
-                PrimaryTokenUsageRecord(
-                    timestamp=str(value["timestamp"]),
-                    source=str(value["source"]),
-                    scope=value.get("scope"),
-                    run_id=value.get("run_id"),
-                    model=value.get("model"),
-                    input=value.get("input"),
-                    output=value.get("output"),
-                    cache=value.get("cache"),
-                    total=value.get("total"),
-                    notes=value.get("notes"),
-                )
-            )
-        return records
-
     def write_json(self, run_id: str, name: str, value: Any) -> None:
         rd = self.run_dir(run_id)
         with _file_lock(rd / ".lock"):
@@ -193,6 +159,7 @@ class RunStore:
     def storage_diagnostics(self, run_id: str) -> dict[str, Any]:
         rd = self.run_dir(run_id)
         issues: list[dict[str, Any]] = []
+        run_payload: dict[str, Any] | None = None
         for name in ["run.json", "task.json", "final_report.json"]:
             path = rd / name
             if name == "final_report.json" and not path.exists():
@@ -201,6 +168,11 @@ class RunStore:
                 issues.append({"code": "missing_artifact", "path": str(path), "severity": "error"})
                 continue
             _diagnose_json(path, issues)
+            if name == "run.json":
+                try:
+                    run_payload = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    run_payload = None
         for name in ["dialogue.jsonl", "permissions.jsonl"]:
             path = rd / name
             if not path.exists():
@@ -213,6 +185,18 @@ class RunStore:
                 issues.append({"code": "missing_artifact", "path": str(path), "severity": "warning"})
         for path in sorted(rd.glob("*.tmp")):
             issues.append({"code": "partial_write_tmp", "path": str(path), "severity": "warning"})
+        if run_payload and run_payload.get("status") == "interrupted":
+            for permission in _latest_permissions(self._read_jsonl(run_id, "permissions.jsonl")).values():
+                if permission.get("status") == "pending":
+                    issues.append(
+                        {
+                            "code": "stale_pending_permission",
+                            "permission_id": permission.get("permission_id"),
+                            "adapter_request_id": permission.get("adapter_request_id"),
+                            "severity": "warning",
+                            "recoverability": "not_resolvable_without_adapter_reattachment",
+                        }
+                    )
         return {"schema_version": 1, "run_id": run_id, "issues": issues, "ok": not any(item["severity"] == "error" for item in issues)}
 
     def _append_jsonl(self, run_id: str, name: str, value: Any) -> None:
@@ -279,6 +263,15 @@ def _ensure_under(path: Path, parent: Path, field: str) -> None:
         path.relative_to(parent)
     except ValueError as exc:
         raise ValueError(f"invalid {field}: {path}") from exc
+
+
+def _latest_permissions(permissions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    for permission in permissions:
+        permission_id = str(permission.get("permission_id") or "")
+        if permission_id:
+            latest[permission_id] = permission
+    return latest
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

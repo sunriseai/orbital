@@ -35,6 +35,44 @@ Core components:
 
 The Prole Harness MCP first draft validates this component split, but Orbital should make the contracts sharper before rebuilding. In particular, profile recommendation, storage recovery, adapter support tiers, permission restart behavior, and primary-safe redaction should be explicit product contracts rather than incidental implementation behavior.
 
+## Risk-Driven Architecture
+
+Orbital should make expected failures explicit and attach each major risk to a concrete product control. A feature is readiness-critical when it prevents the primary harness from accepting bad evidence, taking unsafe action, or trusting an unsupported harness capability.
+
+| Risk | What can fail | Required controls |
+| --- | --- | --- |
+| Adapter drift | ACP harnesses emit different event, permission, stop, stderr, or usage shapes. | Adapter conformance fixtures, raw transcript retention, support tiers, capability gaps, smoke evidence. |
+| Prompt over-trust | The secondary ignores constraints, reports success without proof, or treats primary-only guidance as worker instructions. | Worker-safe prompt construction, path-scope evidence, requested checks, primary-safe summaries, primary-owned final acceptance. |
+| Evidence gaps | A completed run has no meaningful edits, no checks, missing tool evidence, or only natural-language claims. | Warning codes, failure classifications, changed-file snapshots, check evidence, tool timeline, repair seeds. |
+| Permission ambiguity | Adapter options are missing, ambiguous, stale after restart, or not actually actionable. | Normalized permission records, explicit option IDs, conservative inference, stable errors, decision audit trail. |
+| Storage and restart uncertainty | Run metadata, final reports, JSONL logs, or pending permissions are partial or stale after interruption. | Schema versions, atomic writes, append-only event logs, bounded reads, recovery diagnostics, `interrupted` and `unknown` statuses. |
+| Quiet-run mistakes | Orbital stops a live quiet worker or keeps waiting on a dead one. | Liveness model, process inspection, pending permission state, optional model-log activity, stop-without-liveness warnings. |
+| Telemetry misattribution | Token totals are missing, double-counted, adapter-invented, or correlated to the wrong run. | Exact-only canonical telemetry, local agent-log correlation, isolated token probes, diagnostic adapter payloads, explicit unknowns. |
+| Profile mismatch | A ready profile is treated as known-good or selected for an unsuitable task. | Readiness/support-tier separation, classification metadata, recommendation caveats, no promotion without fixtures and smoke. |
+| Scope creep | SDLC, sandboxing, or richer git workflows displace the MCP-to-ACP delegation wedge. | Non-goals, deferred layers, support-tier gates, risk-ranked roadmap. |
+
+Risk scoring:
+
+| Risk | Impact | Likelihood | Easy now | Priority implication |
+| --- | ---: | ---: | ---: | --- |
+| Adapter drift | 5 | 4 | 4 | Build Codex/OpenCode replay fixtures before promoting support tiers. |
+| Evidence gaps | 5 | 4 | 5 | Add deterministic warnings, check evidence, snapshots, and repair seeds early. |
+| Permission ambiguity | 5 | 3 | 4 | Harden option mapping, stable errors, and audit records before broad use. |
+| Storage and restart uncertainty | 4 | 3 | 4 | Implement atomic writes, schema versions, locks, bounded reads, and recovery diagnostics. |
+| Telemetry misattribution | 3 | 4 | 5 | Keep exact-only local-log telemetry and deterministic token probes. |
+| Profile mismatch | 4 | 3 | 4 | Expose readiness, support tier, capability gaps, and recommendation caveats everywhere. |
+| Quiet-run mistakes | 3 | 3 | 3 | Use liveness before stop; defer richer process/model-log work behind evidence and adapter gates. |
+| Prompt over-trust | 5 | 4 | 2 | Reduce blast radius with prompt boundaries and evidence checks; do not treat prompts as enforcement. |
+| Scope creep | 3 | 4 | 3 | Keep sandboxing, hosted service, SDLC, and richer git layers deferred. |
+
+Risk gates:
+
+- `known_good_acp` requires adapter conformance fixtures, real smoke evidence, documented capability gaps, and passing deterministic regression tests.
+- Primary-safe run summaries must prefer unknown, warning, or blocked states over optimistic inference when evidence is missing.
+- Permission resolution must fail closed when adapter option mapping is ambiguous or no longer actionable.
+- Token telemetry must remain unknown unless a canonical local source is exactly correlated to the run.
+- Recovery must preserve raw evidence and mark uncertainty rather than rewriting history.
+
 ## Lessons From Prole Harness MCP
 
 Orbital should carry forward these first-draft implementation patterns:
@@ -47,7 +85,7 @@ Orbital should carry forward these first-draft implementation patterns:
 - Policy verdicts that convert observable evidence into `accept_candidate`, `needs_repair`, `reject`, `blocked`, or `requires_primary_review`.
 - Repair seeds that preserve original scope, checks, and acceptance hints while narrowing the next attempt to server-observed gaps.
 - Liveness analysis that fuses run status, latest event time, pending permission state, pending tool state, process state, and optional external model-log activity.
-- Exact-only telemetry that keeps primary usage, secondary adapter usage, and external model-log usage separate unless exact correlation exists.
+- Exact-only telemetry that uses correlated local Codex, Claude, and OpenCode agent logs as canonical token usage and keeps adapter payload and external model-log usage diagnostic.
 - Session warnings that identify workflow drift without making Orbital the final acceptance authority.
 
 Orbital should deliberately rework these first-draft limitations:
@@ -89,7 +127,7 @@ Suggested schema:
   "support": {
     "tier": "experimental_acp",
     "notes": [
-      "Manual local smoke passed with OpenCode 1.17.11 and ACP protocolVersion 1.",
+      "Manual local smoke passed with OpenCode 1.17.13 and ACP protocolVersion 1.",
       "Do not promote to known_good_acp until adapter conformance fixtures pass."
     ]
   },
@@ -159,8 +197,9 @@ For example, a CLI profile can be ready and useful while still reporting `cli_fa
 
 Current local smoke evidence:
 
-- `codex_acp_local`: manual local ACP smoke passed through `codex-acp` using local subscription auth.
-- `opencode_acp_local`: manual local ACP smoke passed through `opencode acp --pure`; preflight recorded OpenCode `1.17.11` and ACP `protocolVersion=1`.
+- `codex_acp_local`: manual local ACP smoke passed through the legacy Zed `codex-acp` command using local subscription auth. Permission probes against this adapter may complete without ACP permission requests because Codex internal approval handling can absorb the event.
+- `codex_acp_official`: experimental side-by-side profile for the maintained `@agentclientprotocol/codex-acp` app-server adapter. It runs through `npx -y @agentclientprotocol/codex-acp` with `INITIAL_AGENT_MODE=read-only` so edits and commands should exercise approval mediation when the adapter surfaces ACP permission events.
+- `opencode_acp_local`: manual local ACP smoke passed through `opencode acp --pure`; preflight recorded OpenCode `1.17.13` and ACP `protocolVersion=1`.
 - `claude_code_cli_local`: local/subscription Claude path is CLI fallback through `claude`, not ACP.
 - `claude_agent_acp_api`: disabled API-backed ACP profile via `claude-agent-acp`; explicit setup is required and it is not smoke-verified yet.
 
@@ -210,6 +249,7 @@ Recommendation output should be deterministic for the same inputs and config. Ea
 - `missing_capabilities`
 - `cost_posture`
 - `locality`
+- `recommendation_factors`
 - `reasons`
 - `caveats`
 
@@ -264,13 +304,13 @@ Primary-safe tools should omit raw events by default. `get_debug_dialogue` shoul
 
 Minimum run contracts:
 
-- `preflight_task_run` validates the task input, profile selection or classification query, workdir, path scope, requested checks, and policy settings. It returns selected or candidate profiles, warnings, blocking errors, and permission expectations without starting a worker.
+- `preflight_task_run` validates the task input, profile selection or classification query, workdir, path scope, requested checks, and policy settings. It returns selected or candidate profiles, readiness, support tier, classification metadata, normalized capabilities, deterministic capability gaps, warnings, blocking errors, and permission expectations without starting a worker.
 - `start_task_run` accepts either an explicit profile ID or a classification query, plus the task input model. It returns a run ID immediately after durable run creation and launch attempt recording.
 - `send_task_message` appends a bounded worker-safe message to an active run when the adapter supports continued dialogue. It must reject primary-only orchestration guidance.
 - `get_run_status_digest` returns primary-safe status, liveness headline, latest safe worker update, pending permissions, changed-file counts, check status, warning count, and next recommended poll interval.
-- `get_run_summary` returns the full primary-safe evidence model after completion or on request for active runs. It should include unknown fields explicitly rather than omitting them.
+- `get_run_summary` returns the full primary-safe evidence model after completion or on request for active runs. It should include unknown fields explicitly rather than omitting them. Evidence fields include `evidence_status`, `evidence_score`, and grouped `evidence_groups` so a primary harness can distinguish complete evidence, repair-needed gaps, blocked runs, and review-only caveats without parsing worker prose.
 - `get_debug_dialogue` requires an explicit run ID and should support bounded ranges or byte limits so raw transcript access cannot accidentally flood the primary context.
-- `resolve_permission` accepts a permission request ID, decision, optional edited command or scope, and rationale. It records the primary decision and returns whether the adapter accepted it.
+- `resolve_permission` accepts a permission request ID, decision, optional adapter request ID assertion, option ID, rationale, and deciding primary identifier. It records the primary decision and returns whether the adapter accepted, rejected, ignored, or failed the decision.
 - `get_run_liveness` returns the liveness model described below and should be callable for any active or recently interrupted run.
 - `stop_task_run` requests cooperative cancellation first when the adapter supports it, then records whether process termination was attempted or required.
 - `list_task_runs` supports filtering by session ID, profile ID, status, workdir, and time range, with pagination.
@@ -354,6 +394,8 @@ Adapter output must preserve:
 - event timestamp
 - run ID
 
+Permission mediation is part of the adapter contract, not an optional report detail. When a secondary harness asks for approval, Orbital must carry enough structured information back to the primary harness for the primary to make a safe decision when policy allows. That includes the original adapter request, normalized summary, action or command, paths/resources, risk/category metadata, adapter option IDs, and the eventual adapter response after approval or denial.
+
 ACP compatibility differences should be hidden from primary harnesses. If OpenCode, Pi, Codex, or Claude Agent SDK use slightly different ACP event shapes, adapters should map them to the same event vocabulary.
 
 Adapter conformance fixtures:
@@ -365,6 +407,7 @@ Each supported runtime family should have fixture transcripts or fake harnesses 
 - streamed text updates
 - tool start/update/completion/failure
 - permission request and resolution
+- explicit adapter option IDs and primary-selected approval/denial response
 - stderr capture
 - stop/cancel behavior
 - exact token usage when exposed
@@ -372,6 +415,8 @@ Each supported runtime family should have fixture transcripts or fake harnesses 
 - malformed or unknown event shapes
 
 A profile should not be labeled `known_good_acp` until its adapter passes conformance fixtures and at least one smoke run.
+
+The conformance foundation should parse transcript logs into an expectation-based report with observed client methods, server methods, session updates, result statuses, permission option IDs, model metadata, usage payloads, malformed lines, and missing expected features. Fake ACP is the baseline fixture; Codex and OpenCode should be added as scrubbed replay fixtures before either profile is promoted.
 
 Near-term adapter hardening should focus on turning the current fake ACP conformance baseline into reusable real-harness checks. Codex and OpenCode are the first practical targets because local smoke has already passed for both. Pi and Claude Agent SDK ACP should follow the same profile, readiness, smoke, fixture, and support-tier workflow once their setup paths are verified.
 
@@ -451,6 +496,7 @@ Run summaries should preserve the current sketch's most useful ideas:
 - permission counts
 - tool timeline
 - evidence
+- evidence status, evidence score, and grouped evidence warnings
 - exact token telemetry when known
 - exact model telemetry when known
 - warning details
@@ -537,13 +583,13 @@ Storage invariants:
 - Large logs should have configurable retention or truncation settings. Primary-safe summaries should reference truncated logs explicitly.
 - Debug transcripts should not be loaded into memory unboundedly for summary generation.
 - The storage schema should include a version so future migrations can be explicit.
-- Orbital should provide a diagnostic command or tool result that identifies storage corruption, partial writes, and unsupported schema versions.
+- Orbital should provide a diagnostic command or tool result that identifies storage corruption, partial writes, unsupported schema versions, and stale pending permissions after recovery.
 
 Recovery requirements:
 
 - On startup, Orbital should scan non-terminal runs in storage.
 - If a run has no active controller in this server process, Orbital should mark it `interrupted` or `unknown` unless it can safely reattach to the adapter.
-- Pending permissions from a previous process should remain visible in summaries, but `resolve_permission` should return a stable `permission_not_resolvable_after_restart` error unless adapter reattachment is supported.
+- Pending permissions from a previous process should remain visible in summaries, but `resolve_permission` should return a stable `permission_not_resolvable_after_restart` error unless adapter reattachment is supported. Recovery diagnostics should flag these permissions as `stale_pending_permission` with `recoverability=not_resolvable_without_adapter_reattachment`.
 - Interrupted runs should preserve all existing artifacts and be eligible for report inclusion.
 - Recovery should never delete raw logs or overwrite final reports without recording a recovery event.
 - If JSONL files contain malformed lines, Orbital should skip malformed entries for bounded reads, report corruption diagnostics, and avoid failing the entire summary when possible.
@@ -580,8 +626,10 @@ The default local open source mode should be honest about the active enforcement
 
 Permission decisions:
 
-- The primary harness should be able to approve reasonable risky actions with an explicit rationale.
-- Orbital should record the original request, normalized risk category, decision, deciding primary harness, timestamp, and resulting adapter action.
+- The primary harness should be able to approve reasonable risky actions with an explicit rationale when policy allows.
+- Orbital should give the primary harness enough context to decide without requiring the user to manually approve every secondary-agent action.
+- Orbital should record the original request, normalized risk category, command/action, paths/resources, available adapter options, decision, deciding primary harness, timestamp, and resulting adapter action.
+- Orbital should send the selected adapter option ID back to the secondary harness and record whether the run continued, failed, or remained blocked after the decision.
 - When an adapter cannot pause for permission approval, Orbital should report the gap as a capability limitation instead of implying enforcement.
 - If Orbital only detects a violation after the fact, it should classify it as observed evidence, not as a prevented action.
 
@@ -595,13 +643,25 @@ Orbital should normalize adapter permission shapes into:
 - `status`
 - `summary`
 - `risk`
+- `action`
+- `command`
+- `command_or_action`
 - `paths`
+- `resources`
 - `options`
 - `raw_ref`
+- `requested_at`
+- `resolved_at`
+- `decision`
 - `resolved_option_id`
 - `decision_rationale`
+- `deciding_primary`
+- `adapter_resolution_status`
+- `adapter_result`
 
 Option matching should prefer explicit option IDs from the adapter. If the primary supplies only `approve` or `deny`, Orbital may infer the adapter option from labels/kinds only when exactly one option matches. Ambiguous or missing options should return a stable error and require explicit `option_id`.
+
+Permission resolution must persist the outcome as evidence even when the adapter cannot accept the decision. Stable failure codes include `unknown_permission`, `unknown_adapter_request`, `permission_already_resolved`, `ambiguous_permission_option`, `permission_option_not_inferable`, `permission_not_resolvable_after_restart`, and `adapter_permission_resolution_failed`.
 
 Post-restart behavior must be clear: stored pending permissions are evidence, but not necessarily actionable.
 
@@ -639,7 +699,7 @@ Primary harnesses should call liveness before stopping quiet runs.
 Stop behavior:
 
 - `stop_task_run` should record whether a recent liveness check existed and whether it allowed stopping.
-- If no stop-allowed liveness recommendation exists, Orbital may still stop when the primary explicitly requests it, but should add a session warning.
+- If no recent stop-allowed liveness recommendation exists, Orbital may still stop when the primary explicitly requests it, but should add a `stop_without_liveness_check` session warning with the last verdict, last recommended action, and last check age when available.
 - Stop should attempt cooperative adapter cancellation first when supported.
 - Process termination should be recorded separately from cooperative cancellation.
 - Pending permissions should be cancelled or marked `unknown` when a run is stopped, according to adapter capability.
@@ -648,18 +708,24 @@ Stop behavior:
 
 Telemetry should be exact-only.
 
-- Secondary tokens come from adapter-observed usage payloads.
-- Primary tokens are recorded only when the primary harness reports exact usage.
-- External model-log telemetry stays separate unless it can be correlated to a specific run.
+- Canonical tokens come from correlated local Codex, Claude, and OpenCode agent logs.
+- Adapter-observed usage payloads are diagnostic and are not used for canonical totals.
+- External model-log telemetry stays diagnostic unless it can be correlated to a specific run.
 - Unknown model or token fields should remain explicit unknowns.
+
+Current canonical local sources:
+
+- Codex is parsed from `~/.codex/sessions/**/rollout-*.jsonl`. Orbital groups rollout files by session ID, reads `total_token_usage`, and records net input, cached input, output, model, timestamp, session ID, and source path.
+- OpenCode is parsed from `~/.local/share/opencode/opencode.db`. Orbital correlates `session.directory` to the run workspace, reads `step-finish` token snapshots from the `part` table, and uses the highest reported `tokens.total` as the session total. OpenCode `step-finish` rows are cumulative snapshots, not additive line items, so summing them double-counts token usage.
+- Claude project JSONL parsing exists as a supported local agent-log source, but the practical release gate is Codex plus OpenCode until a Claude ACP setup path is verified.
 
 Telemetry aggregation:
 
-- Secondary run telemetry should aggregate exact adapter-observed usage records from normalized events and raw transcript payloads.
-- Primary telemetry should be appended by the primary harness with source, scope, optional run ID, optional model, exact counts, and notes.
-- Session reports should expose primary, secondary, and combined token accounting separately.
-- Combined totals should be known only when both primary and secondary totals are known exactly.
-- External model-log telemetry should include provider, source, attribution, latest record, and caveats. It should not be folded into primary/secondary totals without run-correlation metadata.
+- Run summaries should expose canonical local agent-log token totals only when exactly one local agent-log record is correlated by workspace path and run time window. If zero or multiple records match, canonical `tokens.known` remains false and the matched records stay diagnostic.
+- Manual real-harness token probes should use an isolated token workspace and fail unless exactly one external agent-log record is correlated to the run.
+- Session reports should sum canonical local agent-log totals across selected runs.
+- Adapter payload telemetry should remain available as a diagnostic source for debugging adapter behavior.
+- External model-log telemetry should include provider, source, attribution, latest record, and caveats. It should not be folded into canonical totals without run-correlation metadata.
 
 ## Migration From Current Sketch
 
@@ -678,7 +744,7 @@ Carry forward:
 - liveness analysis
 - session/report concepts
 - fake ACP harness and adapter conformance fixture strategy
-- exact-only primary/secondary/model-log telemetry separation
+- canonical local agent-log telemetry with diagnostic adapter/model-log sources
 - deterministic repair seed generation
 - session warnings for workflow drift
 

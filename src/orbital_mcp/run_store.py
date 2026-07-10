@@ -5,16 +5,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .agent_log_telemetry import agent_log_token_usage, run_time_window, scan_external_agent_token_telemetry
 from .config import load_config
 from .liveness import LivenessThresholds, analyze_run_liveness
 from .model_log_telemetry import extract_model_log_token_telemetry
 from .models import normalize_run_status
-from .telemetry import (
-    PrimaryTokenUsageRecord,
-    aggregate_primary_tokens,
-    combine_token_usage,
-    extract_run_telemetry,
-)
+from .telemetry import extract_run_telemetry
 
 
 DEFAULT_MAX_EVENTS = 100
@@ -119,20 +115,27 @@ class RunStore:
     def token_accounting(self, run_id: str, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         run_dir = self._run_dir(run_id)
         run_events = events if events is not None else _read_jsonl(run_dir / "dialogue.jsonl")
-        secondary = extract_run_telemetry(run_dir, run_events).tokens
-        primary_records = self._primary_token_records_for_run(run_id)
-        primary = aggregate_primary_tokens(primary_records, source="primary")
-        combined = combine_token_usage(primary, secondary)
+        run = _read_json(run_dir / "run.json")
+        adapter_payloads = extract_run_telemetry(run_dir, run_events).tokens
         model_log = extract_model_log_token_telemetry(self.model_log_path)
+        since, until = run_time_window(run_events)
+        external_agent_logs = scan_external_agent_token_telemetry(
+            project=run.get("workdir"),
+            since=since,
+            until=until,
+        )
+        canonical = agent_log_token_usage(external_agent_logs)
         return {
-            "primary": primary,
-            "secondary": secondary,
-            "combined": combined,
+            "canonical": canonical,
+            "sources": {
+                "external_agent_logs": external_agent_logs,
+                "adapter_payloads": adapter_payloads,
+                "model_log": model_log,
+            },
             "model_log": model_log,
-            "primary_known": primary.known,
-            "secondary_known": secondary.known,
-            "model_log_known": model_log.known,
-            "primary_records": primary_records[-100:],
+            "external_agent_logs": external_agent_logs,
+            "canonical_known": canonical.known,
+            "external_agent_logs_known": external_agent_logs.known,
         }
 
     def events(self, run_id: str, since_event_id: str | None = None, max_events: int = DEFAULT_MAX_EVENTS) -> dict[str, Any]:
@@ -193,24 +196,6 @@ class RunStore:
             raise FileNotFoundError(session_id)
         return session_dir
 
-    def _primary_token_records_for_run(self, run_id: str) -> list[PrimaryTokenUsageRecord]:
-        records: list[PrimaryTokenUsageRecord] = []
-        sessions_root = self.root / "sessions"
-        if not sessions_root.exists():
-            return records
-        for path in sorted(sessions_root.glob("*/primary_token_usage.jsonl")):
-            for line in path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    value = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if value.get("run_id") != run_id:
-                    continue
-                records.append(_primary_record_from_dict(value))
-        return records
-
 
 def run_activity(run: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
     last_event = events[-1] if events else None
@@ -246,21 +231,6 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
         if isinstance(value, dict):
             values.append(value)
     return values
-
-
-def _primary_record_from_dict(value: dict[str, Any]) -> PrimaryTokenUsageRecord:
-    return PrimaryTokenUsageRecord(
-        timestamp=str(value["timestamp"]),
-        source=str(value["source"]),
-        scope=value.get("scope"),
-        run_id=value.get("run_id"),
-        model=value.get("model"),
-        input=value.get("input"),
-        output=value.get("output"),
-        cache=value.get("cache"),
-        total=value.get("total"),
-        notes=value.get("notes"),
-    )
 
 
 def _latest_pending_tool(events: list[dict[str, Any]]) -> dict[str, Any] | None:

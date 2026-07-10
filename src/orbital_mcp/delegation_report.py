@@ -20,7 +20,7 @@ from .models import (
     TokenAccounting,
 )
 from .store import RunStore
-from .telemetry import aggregate_models, aggregate_primary_tokens, aggregate_tokens, combine_token_usage, sum_token_usages
+from .telemetry import aggregate_models, sum_token_usages
 
 
 SummaryProvider = Callable[[str], RunSummary]
@@ -47,10 +47,17 @@ def build_delegation_report(
         for run in selected_runs
     ]
     measurements.sort(key=lambda item: item.started_at or "")
-    legacy_secondary_tokens = aggregate_tokens([measurement.tokens for measurement in measurements], source="delegation_report")
-    secondary_tokens = sum_token_usages([measurement.tokens for measurement in measurements], source="secondary")
-    primary_records = store.read_primary_token_usage(session_id) if session_id else []
-    token_accounting = _token_accounting(primary_records, secondary_tokens)
+    canonical_tokens = sum_token_usages([measurement.tokens for measurement in measurements], source="external_agent_logs")
+    adapter_payloads = sum_token_usages(
+        [
+            source
+            for measurement in measurements
+            for source in [measurement.token_sources.get("adapter_payloads")]
+            if source is not None
+        ],
+        source="adapter_payloads",
+    )
+    token_accounting = _token_accounting(canonical_tokens, adapter_payloads)
     session = store.load_session(session_id) if session_id else None
     accepted_run_ids_result = sorted(accepted_ids & {measurement.run_id for measurement in measurements})
     rejected_run_ids_result = sorted(rejected_ids & {measurement.run_id for measurement in measurements})
@@ -76,7 +83,7 @@ def build_delegation_report(
         time=_time_summary(measurements),
         runs=_run_counts(measurements),
         outcome=_outcome(measurements),
-        tokens=legacy_secondary_tokens,
+        tokens=canonical_tokens,
         models=aggregate_models([measurement.model for measurement in measurements], source="delegation_report"),
         token_accounting=token_accounting,
         run_measurements=measurements,
@@ -87,23 +94,16 @@ def build_delegation_report(
     )
 
 
-def _token_accounting(primary_records: list[Any], secondary_tokens: Any) -> TokenAccounting:
-    primary_tokens = aggregate_primary_tokens(primary_records, source="primary")
-    combined = combine_token_usage(primary_tokens, secondary_tokens)
+def _token_accounting(canonical_tokens: Any, adapter_payloads: Any) -> TokenAccounting:
     caveats: list[str] = []
-    if not primary_tokens.known:
-        caveats.append("Primary token usage is unknown because the primary harness did not report exact usage.")
-    if not secondary_tokens.known:
-        caveats.append("Secondary token usage is unknown because the secondary adapter did not expose exact usage.")
-    if not combined.known:
-        caveats.append("Combined token usage is unknown unless both primary and secondary totals are known exactly.")
+    if not canonical_tokens.known:
+        caveats.append("Canonical token usage is unknown because no correlated local agent-log records were found.")
+    if adapter_payloads.known:
+        caveats.append("Adapter payload token usage is diagnostic only and is not used for canonical totals.")
     return TokenAccounting(
-        primary=primary_tokens,
-        secondary=secondary_tokens,
-        combined=combined,
-        primary_records=primary_records[-100:],
-        primary_known=primary_tokens.known,
-        secondary_known=secondary_tokens.known,
+        canonical=canonical_tokens,
+        sources={"adapter_payloads": adapter_payloads},
+        external_agent_logs_known=canonical_tokens.known,
         caveats=caveats,
     )
 
@@ -173,6 +173,7 @@ def _measure_run(
         execute_calls_completed=summary.evidence.tool_calls.completed_execute_count,
         tokens=summary.tokens,
         model=summary.model,
+        token_sources=summary.token_sources,
         policy_verdict=_measurement_policy_verdict(summary),
         policy_reason_codes=list(summary.failure_classification),
         file_attribution=summary.file_attribution,

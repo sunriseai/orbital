@@ -73,10 +73,13 @@ Exit criteria:
 
 Goal: make ACP conformance the main trust gate for supported secondary coding agents.
 
+Primary risks addressed: adapter drift, permission ambiguity, profile mismatch, and evidence gaps caused by runtime-specific protocol behavior.
+
 Deliverables:
 
 - Normalize ACP event shapes across OpenCode, Pi, Codex, and API-backed Claude Agent SDK where available.
 - Capture text updates, tool events, permission requests, stop behavior, model selection, and usage payloads.
+- Preserve complete permission approval round trips: request context, adapter option IDs, primary decision, adapter response, and post-decision run evidence.
 - Keep raw protocol payloads in debug logs, not primary-safe summaries.
 - Add adapter conformance fixtures for each supported runtime family.
 - Keep CLI compatibility only where ACP is not available or not reliable.
@@ -84,14 +87,18 @@ Deliverables:
 - Treat Claude ACP as `claude-agent-acp` through the Claude Agent SDK with API-key auth, not as a `claude-code-acp` local-subscription command.
 - Port or recreate the fake ACP harness strategy from Prole Harness MCP.
 - Add fixture coverage for malformed events, unknown event shapes, permission option matching, exact telemetry, stderr, and stop behavior.
+- Add fixture coverage for primary-mediated approval and denial so Orbital can prove the primary harness receives enough context to decide without constant manual user approval.
 - Mark each profile's support tier from fixture and smoke-run evidence.
 - Use fake ACP conformance as the local baseline, then add real-harness conformance fixtures for Codex and OpenCode before considering either profile known-good.
+- Keep real-runtime permission smoke outcomes explicit: `pass` means a permission request was observed and resolved, while `permission_capability_gap` means the harness completed without emitting an ACP permission request.
 - Keep richer Git/SDLC attribution and stronger sandbox execution out of this phase unless a conformance fixture requires a narrow supporting change.
 
 Exit criteria:
 
 - Each supported ACP harness can pass a smoke run.
-- Manual local ACP smoke currently covers Codex and OpenCode; OpenCode smoke records OpenCode `1.17.11` and ACP `protocolVersion=1`.
+- Manual local ACP smoke currently covers legacy Codex ACP and OpenCode; OpenCode smoke records OpenCode `1.17.13` and ACP `protocolVersion=1`.
+- Official Codex ACP app-server validation is represented by the side-by-side `codex_acp_official` profile and manual wrappers, but it remains experimental until smoke evidence and conformance fixtures are captured.
+- Manual local ACP permission smoke reports either a full approval round trip or a clearly labeled runtime permission capability gap.
 - Claude Agent SDK ACP exists as disabled API-backed profile metadata, but remains unverified until it passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.
 - Primary harnesses do not need runtime-specific ACP knowledge.
@@ -111,14 +118,14 @@ Deliverables:
 - Document `ticket` as a bounded local task record if the term remains in API names.
 - Preserve first-draft session warnings for profile mismatch, path-scope drift, missing review evidence, unreviewed attempts, unsatisfied handoff items, unattributed files, and stopping without liveness.
 - Preserve deterministic next-action recommendations for ordinary session control flow.
-- Preserve exact primary token usage recording for session reports.
+- Preserve canonical local agent-log token telemetry for session reports.
 
 Exit criteria:
 
 - A primary harness can manage a multi-run task loop with durable state.
 - The handoff model remains generic and does not assume sprint, issue, PR, release, or CI workflow semantics.
 - Repair tasks can be generated from server-observed gaps without reading raw transcripts.
-- Session reports separate primary, secondary, combined, and external model-log telemetry.
+- Session reports expose canonical local agent-log telemetry and keep adapter payload and model-log telemetry diagnostic.
 
 ## Phase 5: Open Source Readiness
 
@@ -148,6 +155,8 @@ Exit criteria:
 
 Goal: improve trust in run state and primary decisions.
 
+Primary risks addressed: storage and restart uncertainty, quiet-run mistakes, file attribution gaps, and policy/evidence ambiguity.
+
 Deliverables:
 
 - Stronger policy verdict coverage.
@@ -155,6 +164,7 @@ Deliverables:
 - More robust file attribution for dirty workdirs.
 - Improved liveness with optional model log adapters.
 - Better permission option matching and audit output.
+- Stronger primary-mediated approval summaries for smart, safe secondary-agent supervision.
 - Golden test fixtures for realistic ACP transcripts.
 - Configurable command policy that can ask the primary for approval where adapter mediation exists, instead of blanket deny behavior.
 - Explicit attribution confidence for file changes and final dirty files.

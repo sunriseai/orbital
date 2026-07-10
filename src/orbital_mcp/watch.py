@@ -1006,14 +1006,14 @@ def _age(value: Any) -> str:
 
 
 def _tokens_line(accounting: dict[str, Any]) -> str:
-    primary = accounting.get("primary")
-    secondary = accounting.get("secondary")
-    combined = accounting.get("combined")
-    model_log = accounting.get("model_log")
+    canonical = accounting.get("canonical")
+    sources = accounting.get("sources") or {}
+    adapter_payloads = sources.get("adapter_payloads") if isinstance(sources, dict) else None
+    model_log = sources.get("model_log") if isinstance(sources, dict) else accounting.get("model_log")
     return (
-        f"primary={_token_total(primary)} "
-        f"secondary={_token_total(secondary)} "
-        f"combined={_token_total(combined)} "
+        f"canonical={_token_total(canonical)} "
+        f"source=external_agent_logs "
+        f"adapter_payloads={_token_total(adapter_payloads)} "
         f"model_log={_model_log_token_total(model_log)}"
     )
 

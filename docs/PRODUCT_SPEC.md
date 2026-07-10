@@ -18,7 +18,8 @@ Carry forward these validated product ideas:
 - Primary-safe summaries are necessary for ordinary control flow. The primary harness should be able to poll concise status and review bounded summaries without reading raw transcripts by default.
 - Handoff/session state is valuable in V1. Durable objectives, handoff items, bounded tasks, attempts, primary reviews, repair seeds, and reports let the primary harness manage real multi-run work rather than reconstructing state from prompts.
 - Liveness is a safety feature, not a UI extra. The first draft showed that quiet server output does not always mean the worker is stalled; primary harnesses need stop guidance before cancelling long or quiet runs.
-- Exact-only telemetry is the right trust boundary. Adapter-observed secondary usage, primary-reported usage, and external model-log telemetry should remain separate unless exact correlation exists.
+- Exact-only telemetry is the right trust boundary. Correlated local agent logs should be the canonical token source; adapter payloads and external model-log telemetry should remain diagnostic unless exact correlation exists. The practical V1 focus is Codex rollout JSONL and OpenCode SQLite telemetry, with Claude local-log parsing treated as secondary until a Claude ACP setup path is verified.
+- Permission mediation is a core delegation feature. Orbital should preserve enough request context, adapter option IDs, decisions, and resulting evidence for a primary harness to make smart, safe approval decisions for secondary agents when policy allows, instead of forcing the user to approve every action manually.
 - Compatibility adapters are useful, but capability gaps must be explicit. CLI fallbacks can provide value, but they usually have weaker permissions, telemetry, follow-up dialogue, and tool-event semantics than ACP adapters.
 
 Rework these first-draft weaknesses:
@@ -30,6 +31,47 @@ Rework these first-draft weaknesses:
 - Keep public docs focused on MCP-to-ACP delegation. Benchmark, playbook, and SDLC language can exist as examples or later layers, but should not define the core product surface.
 - Treat real ACP harness conformance as the central near-term product hardening work. Richer Git/SDLC integration and stronger sandbox execution can build on the delegation layer later, but they should not displace adapter trust as the V1 wedge.
 
+## Risk Model
+
+The core delegation loop is validated by prior Prole Harness MCP work: a primary harness can use Orbital-style MCP control to supervise a secondary ACP worker on bounded coding tasks. The remaining product risk is reliability under real-world variation, not whether the loop is useful.
+
+Important risks:
+
+- Adapter drift: Codex, OpenCode, and future ACP harnesses may emit different event shapes, permission requests, stop behavior, or usage payloads. Protection: adapter conformance fixtures, raw transcript retention, support tiers, and no `known_good_acp` label without smoke plus fixture evidence.
+- Prompt over-trust: a well-crafted worker prompt improves behavior but is not an enforcement boundary. Protection: worker-safe prompt construction, allowed/forbidden path evidence, requested check evidence, deterministic warnings, and primary review ownership.
+- Evidence gaps: the worker may claim success without edits, checks, or proof. Protection: server-derived summaries, changed-file snapshots, tool timelines, check evidence, warning codes, and repair seeds from observable gaps.
+- Permission confusion: approval choices may be ambiguous, stale, or unsupported by a specific adapter. Protection: normalized permission records, explicit adapter option IDs, conservative option inference, stable permission errors, adapter outcome states, and complete decision audit trails.
+- Permission capability gaps: a real ACP harness may complete an action without emitting any ACP permission request under its current policy/configuration. Protection: fake-ACP round-trip tests prove Orbital's mediation path, while real-runtime permission smokes classify no-request completions as `permission_capability_gap` rather than as verified approval mediation.
+- Restart and storage uncertainty: active runs, pending permissions, and partial writes can become ambiguous after process interruption. Protection: append-only logs, atomic writes, schema versions, recovery diagnostics, and explicit `interrupted` or `unknown` statuses.
+- Quiet-run misclassification: a secondary harness can be alive but quiet, or dead without a clear terminal event. Protection: liveness checks using run status, latest event time, pending permission state, process state, and optional model-log activity before stopping.
+- Telemetry misattribution: token counts can be missing, double-counted, or attributed to the wrong run. Protection: exact-only telemetry, Codex/OpenCode local-log correlation by isolated workspace and time window, diagnostic-only adapter payloads, and unknowns instead of estimates.
+- Profile selection mistakes: a ready harness may not be a reliable or appropriate harness for a task. Protection: classification metadata, readiness/support-tier separation, capability gaps, recommendation caveats, and primary-owned final selection.
+- Scope creep: stronger sandboxing, SDLC workflows, and richer git attribution can distract from the delegation layer. Protection: explicit non-goals and deferred layers until ACP delegation, evidence, permissions, storage, and recovery are trustworthy.
+
+Risk scores use a 1-5 scale:
+
+- Impact: 5 means the risk can directly cause unsafe action, bad accepted output, or misleading primary decisions.
+- Likelihood: 5 means the risk is expected to occur often in ordinary local use.
+- Easy now: 5 means deterministic implementation can materially reduce the risk now, without depending mostly on future prompt improvements.
+
+| Risk | Impact | Likelihood | Easy now | Near-term read |
+| --- | ---: | ---: | ---: | --- |
+| Adapter drift | 5 | 4 | 4 | Highest priority because fixtures can catch real protocol mismatches before support claims. |
+| Evidence gaps | 5 | 4 | 5 | High leverage because warnings, checks, snapshots, and repair seeds are deterministic. |
+| Permission ambiguity | 5 | 3 | 4 | High impact; can be reduced with option IDs, stable errors, and audit records. |
+| Storage and restart uncertainty | 4 | 3 | 4 | Important for durable use; deterministic storage/recovery work is available now. |
+| Telemetry misattribution | 3 | 4 | 5 | Likely, but mostly affects reporting/cost trust; Codex/OpenCode controls are tractable. |
+| Profile mismatch | 4 | 3 | 4 | Support tiers and recommendation caveats can reduce bad routing decisions. |
+| Quiet-run mistakes | 3 | 3 | 3 | Useful safety work, but less directly tied to bad accepted output than evidence and adapter risks. |
+| Prompt over-trust | 5 | 4 | 2 | Very important, but deterministic protections only reduce blast radius; prompts alone cannot solve it. |
+| Scope creep | 3 | 4 | 3 | Product risk more than run-output risk; controlled through docs and prioritization. |
+
+Lower-priority risks for V1:
+
+- Perfect cost accounting across every provider. Codex and OpenCode exact local telemetry are enough for the first practical release gate.
+- Full Claude ACP parity. Claude should remain split between local CLI fallback and explicit API-backed Agent SDK ACP until a verified setup path exists.
+- Hard sandbox enforcement. Orbital should report policy and evidence honestly before claiming sandbox-grade protection.
+
 ## Product Goals
 
 - Make multi-harness coding delegation easy to install and run locally.
@@ -37,6 +79,7 @@ Rework these first-draft weaknesses:
 - Support multiple configured secondary harnesses, including OpenCode, Pi, Codex, Claude Code CLI fallback, and API-backed Claude Agent SDK ACP.
 - Let users classify harnesses by task suitability, cost posture, auth mode, capabilities, and operating constraints.
 - Give primary harnesses enough structured evidence to judge delegated work without trusting worker final prose.
+- Give primary harnesses enough structured permission context to approve, deny, or defer secondary-agent requests without depending on the user to manually approve every action.
 - Preserve a clean boundary between primary-only orchestration guidance and worker-safe task instructions.
 - Preserve durable handoff/session state for multi-run delegation loops.
 - Stay useful as a standalone open source MCP before any SDLC-specific product layer exists.
@@ -66,7 +109,7 @@ The primary harness:
 - decomposes it into bounded task requests
 - reviews Orbital's profile recommendations when useful
 - selects or confirms a secondary harness profile
-- resolves permissions conservatively
+- resolves permissions conservatively from structured request context when policy allows
 - inspects changed files, checks, warnings, and evidence
 - decides whether a run is accepted, rejected, or needs repair
 - reports outcome and remaining risk to the user
@@ -82,6 +125,7 @@ Orbital:
 - speaks ACP where available
 - exposes non-ACP compatibility adapters only when needed
 - normalizes dialogue, tool activity, permissions, checks, liveness, telemetry, and file changes
+- exposes secondary permission requests with adapter option IDs, paths/resources, risk context, raw debug references, and resolution evidence
 - stores run and session artifacts locally
 - returns primary-safe summaries and deterministic routing hints
 
@@ -185,8 +229,10 @@ The primary harness should receive:
 - changed files since run start
 - pre-existing dirty files
 - pending and resolved permission requests
+- permission options, selected decisions, rationales, and resulting adapter actions
 - requested check evidence
 - normalized tool evidence
+- evidence status, evidence score, and grouped evidence warnings
 - warnings and failure classifications
 - final worker response
 - bounded dialogue when explicitly requested
@@ -245,6 +291,7 @@ The session model should preserve the first draft's useful operating loop:
 - Local and open. The default product should work as a local open source MCP.
 - Configurable but explicit. Avoid hidden profile switching, hidden API fallback, or implicit credential use.
 - Capability-based safety. Orbital should distinguish what it can enforce, what it can mediate through ACP permissions, and what it can only observe or report.
+- Complete approval channel. Permission requests and responses must carry enough structured context for a primary harness to supervise secondary agents without constant manual user approval.
 - Evidence over vibes. Orbital should record observable facts, not infer success from natural language.
 - Worker prompts stay bounded. Primary-only guidance must not leak into secondary task prompts.
 

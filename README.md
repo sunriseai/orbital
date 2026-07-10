@@ -45,17 +45,32 @@ ORBITAL_RUN_PACKAGING_SMOKE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest disc
 ORBITAL_RUN_REAL_HARNESS_SMOKE=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_validation_optional_smoke.py -v
 ```
 
-The default suite includes a real MCP stdio transport smoke against the local fake harness. `ORBITAL_RUN_PACKAGING_SMOKE=1` additionally creates a temporary virtualenv, installs Orbital from a copied source tree, and verifies the installed console scripts. `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` defaults to trying `codex_acp_local` and `opencode_acp_local`, skipping profiles that `orbital doctor` reports as not ready. Set `ORBITAL_REAL_HARNESS_PROFILES=<profile[,profile]>` to narrow or override that list. Claude ACP should be tested through explicit API-backed `claude_agent_acp_api` setup, not through a local-subscription Claude Code ACP profile.
+The default suite includes a real MCP stdio transport smoke against the local fake harness. `ORBITAL_RUN_PACKAGING_SMOKE=1` additionally creates a temporary virtualenv, installs Orbital from a copied source tree, and verifies the installed console scripts. `ORBITAL_RUN_REAL_HARNESS_SMOKE=1` defaults to trying `codex_acp_local` and `opencode_acp_local`, skipping profiles that `orbital doctor` reports as not ready. Set `ORBITAL_REAL_HARNESS_PROFILES=<profile[,profile]>` to narrow or override that list; use `ORBITAL_REAL_HARNESS_PROFILES=codex_acp_official` to explicitly test the official `@agentclientprotocol/codex-acp` profile. Claude ACP should be tested through explicit API-backed `claude_agent_acp_api` setup, not through a local-subscription Claude Code ACP profile.
 
 Run manual smoke wrappers when you want a timestamped log under `tests/manual/logs/`:
 
 ```bash
 ./tests/manual/run_manual_faux_harness_smoke.sh
 ./tests/manual/run_manual_local_codex_acp_smoke.sh
+./tests/manual/run_manual_official_codex_acp_smoke.sh
 ./tests/manual/run_manual_local_opencode_acp_smoke.sh
+./tests/manual/run_manual_local_codex_acp_permission_smoke.sh
+./tests/manual/run_manual_official_codex_acp_permission_smoke.sh
+./tests/manual/run_manual_local_opencode_acp_permission_smoke.sh
 ```
 
-`run_manual_faux_harness_smoke.sh` stays CI-safe and uses fake harnesses. The `run_manual_local_*_acp_smoke.sh` scripts each target one installed/authenticated local ACP harness and may launch a real Codex or OpenCode worker. The OpenCode script also records `opencode --version`, `opencode acp --help`, and an ACP initialize handshake before the smoke task. Claude Agent SDK ACP smoke should be added here only after `claude_agent_acp_api` has a verified API-key setup path. Each script prints its scope and prerequisites before running.
+`run_manual_faux_harness_smoke.sh` stays CI-safe and uses fake harnesses. The `run_manual_local_*_acp_smoke.sh` scripts each target one installed/authenticated local ACP harness and may launch a real Codex or OpenCode worker. They also run `tests/manual/run_token_probe.py`, which fails unless `get_run_summary().tokens` reports canonical `external_agent_logs` telemetry for one uniquely correlated real local run. The OpenCode script also records `opencode --version`, `opencode acp --help`, and an ACP initialize handshake before the smoke task. The official Codex wrappers target `codex_acp_official`, which runs `npx -y @agentclientprotocol/codex-acp` with `INITIAL_AGENT_MODE=read-only`; the first run may download the package. Claude Agent SDK ACP smoke should be added here only after `claude_agent_acp_api` has a verified API-key setup path. Each script prints its scope and prerequisites before running.
+
+The local permission smoke wrappers separately probe whether a real Codex/OpenCode ACP runtime emits a permission request that Orbital can expose and resolve. A `pass` result means the full primary-mediated approval path was exercised. A `permission_capability_gap` result means the secondary harness completed the task without emitting an ACP permission request, so Orbital had no real permission event to mediate; this is a runtime capability/configuration gap, not evidence that Orbital dropped a request.
+
+### Token Telemetry
+
+Orbital treats token telemetry as exact-only. Canonical run totals come from local agent logs that can be correlated to the run by isolated workspace path and run time window:
+
+- Codex: `~/.codex/sessions/**/rollout-*.jsonl`, using `total_token_usage` records from the Codex rollout log.
+- OpenCode: `~/.local/share/opencode/opencode.db`, using `step-finish` token snapshots from the OpenCode SQLite `part` table. These rows are cumulative snapshots for a session, so Orbital keeps the highest reported `tokens.total` instead of summing rows.
+
+Adapter-reported usage payloads remain visible under diagnostic token sources, but they are not canonical totals. If Orbital cannot uniquely correlate a local agent-log record, `tokens.known` stays false rather than estimating.
 
 ### Claude Support
 
@@ -127,6 +142,7 @@ The product center is:
 2. Simple setup and diagnostics for multiple harness profiles.
 3. ACP-first adapters for Codex, OpenCode, Pi, and API-backed Claude Agent SDK; Claude Code remains a CLI fallback unless a local-subscription ACP path is verified.
 4. Harness classification so a primary harness can choose the right secondary worker for a task.
-5. Structured handoff, evidence, and review data between primary and secondary harnesses.
+5. A complete primary-mediated approval channel so the primary harness can make smart, safe decisions for secondary-agent permission requests when policy allows.
+6. Structured handoff, evidence, and review data between primary and secondary harnesses.
 
 Future SDLC workflows can build on Orbital, but they should not shape the first product surface.

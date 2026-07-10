@@ -49,7 +49,7 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                 "delegation_report": "from session_id or inferred from stored runs by workdir, run_ids, and optional time bounds",
                 "primary_safe_default": "run responses and digests omit raw dialogue by default; use get_debug_dialogue for explicit raw inspection",
                 "failure_classification": "derived from server evidence and normalized across secondary harnesses",
-                "token_reporting": "exact secondary adapter usage plus exact primary-reported usage when available; unknown otherwise",
+                "token_reporting": "canonical local agent-log telemetry from Codex, Claude, and OpenCode when correlated by workspace and run window; adapter usage is diagnostic only",
                 "model_reporting": "exact adapter model metadata when available; unknown otherwise",
                 "stop_safety": "get_run_liveness recommendation should be checked before stop_task_run for suspected inactivity",
             },
@@ -438,32 +438,6 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
         return service.create_repair_ticket_from_run(session_id, ticket_id, run_id, repair_ticket_id)
 
     @mcp.tool()
-    def record_primary_token_usage(
-        session_id: str,
-        source: str,
-        run_id: str | None = None,
-        scope: str | None = None,
-        model: str | None = None,
-        input_tokens: int | None = None,
-        output_tokens: int | None = None,
-        cache_tokens: int | None = None,
-        total_tokens: int | None = None,
-        notes: str | None = None,
-    ) -> dict[str, Any]:
-        return service.record_primary_token_usage(
-            session_id,
-            source,
-            run_id=run_id,
-            scope=scope,
-            model=model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cache_tokens=cache_tokens,
-            total_tokens=total_tokens,
-            notes=notes,
-        )
-
-    @mcp.tool()
     def get_delegation_session(session_id: str) -> dict[str, Any]:
         return service.get_delegation_session(session_id)
 
@@ -532,9 +506,22 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
         permission_id: str,
         decision: str,
         option_id: str | None = None,
+        rationale: str | None = None,
+        adapter_request_id: str | None = None,
+        deciding_primary: str | None = None,
     ) -> dict[str, Any]:
         try:
-            return ok_response(await service.resolve_permission(run_id, permission_id, decision, option_id))
+            return ok_response(
+                await service.resolve_permission(
+                    run_id,
+                    permission_id,
+                    decision,
+                    option_id,
+                    rationale,
+                    adapter_request_id,
+                    deciding_primary,
+                )
+            )
         except Exception as exc:
             return error_response(exc)
 

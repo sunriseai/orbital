@@ -15,6 +15,13 @@ from .base import AcpSessionInfo, AdapterSink, PromptResult
 
 API_KEY_ENV_VARS = ("OPENAI_API_KEY", "CODEX_API_KEY", "ANTHROPIC_API_KEY")
 PROFILE_MODEL_ENV = "ORBITAL_ACP_MODEL"
+PERMISSION_REQUEST_METHODS = {
+    "requestPermission",
+    "session/requestPermission",
+    "session.requestPermission",
+    "session/request_permission",
+    "permission/request",
+}
 
 
 class AcpProtocolError(RuntimeError):
@@ -87,17 +94,19 @@ class AcpWorkerController:
         )
         return PromptResult(status=str(result.get("status", "passed")), text=result.get("text"), raw=result)
 
-    async def resolve_permission(self, request_id: str, option_id: str) -> None:
+    async def resolve_permission(self, request_id: str, option_id: str) -> dict[str, Any]:
         if request_id not in self._pending_permission_request_ids:
             raise AcpProtocolError(f"unknown pending adapter request id: {request_id}")
         self._pending_permission_request_ids.remove(request_id)
+        result = {"outcome": {"outcome": "selected", "optionId": option_id}}
         await self._send(
             {
                 "jsonrpc": "2.0",
                 "id": _decode_jsonrpc_id(request_id),
-                "result": {"outcome": {"outcome": "selected", "optionId": option_id}},
+                "result": result,
             }
         )
+        return result
 
     async def cancel_permission(self, request_id: str) -> None:
         if request_id not in self._pending_permission_request_ids:
@@ -222,7 +231,7 @@ class AcpWorkerController:
                     if violation.enforcement == "block":
                         await self._abort(AcpProtocolError(f"{violation.reason}: {violation.command}"))
             return
-        if method in {"session/request_permission", "permission/request"}:
+        if method in PERMISSION_REQUEST_METHODS:
             adapter_id = str(message.get("id") or params.get("request_id") or params.get("id"))
             self._pending_permission_request_ids.add(adapter_id)
             await self.sink.permission_requested(normalize_permission(self.run_id, adapter_id, message))

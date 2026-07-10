@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from .telemetry import ModelTelemetry, PrimaryTokenUsageRecord, TokenUsage
+from .telemetry import ModelTelemetry, TokenUsage
 
 
 Status = Literal[
@@ -163,13 +163,26 @@ class PermissionRequest:
     permission_id: str
     run_id: str
     adapter_request_id: str
+    schema_version: int = 1
     status: Literal["pending", "approved", "denied", "cancelled"] = "pending"
     summary: str = ""
     risk: str = "unknown"
+    command_or_action: str | None = None
+    action: str | None = None
+    command: str | None = None
     paths: list[str] = field(default_factory=list)
+    resources: list[str] = field(default_factory=list)
     options: list[PermissionOption] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
+    raw_ref: str | None = None
+    requested_at: str | None = None
+    resolved_at: str | None = None
+    decision: Literal["approve", "deny"] | None = None
     resolved_option_id: str | None = None
+    decision_rationale: str | None = None
+    deciding_primary: str | None = None
+    adapter_resolution_status: Literal["accepted", "rejected", "ignored", "failed"] | None = None
+    adapter_result: dict[str, Any] | None = None
 
 
 @dataclass
@@ -323,7 +336,11 @@ class RunSummary:
     permission_counts: RunCounts
     tool_timeline: list[ToolTimelineItem]
     evidence: RunEvidence
+    evidence_status: Literal["complete", "review_needed", "repair_needed", "blocked"]
+    evidence_score: int
+    evidence_groups: dict[str, list[RunWarning]]
     tokens: TokenUsage
+    token_sources: dict[str, Any]
     model: ModelTelemetry
     warnings: list[str]
     warning_details: list[RunWarning]
@@ -341,6 +358,8 @@ class RunStatusDigest:
     changed_file_count: int
     warning_codes: list[str]
     failure_classification: list[str]
+    evidence_status: Literal["complete", "review_needed", "repair_needed", "blocked"]
+    evidence_score: int
     requested_checks: list[CheckEvidence]
     pending_permission_count: int
     tool_counts: ToolCallEvidence
@@ -397,6 +416,7 @@ class RunMeasurement:
     execute_calls_completed: int
     tokens: TokenUsage
     model: ModelTelemetry
+    token_sources: dict[str, Any] = field(default_factory=dict)
     policy_verdict: str | None = None
     policy_reason_codes: list[str] = field(default_factory=list)
     file_attribution: list[FileAttributionRecord] = field(default_factory=list)
@@ -463,12 +483,9 @@ class OutcomeAssessment:
 
 @dataclass
 class TokenAccounting:
-    primary: TokenUsage
-    secondary: TokenUsage
-    combined: TokenUsage
-    primary_records: list[PrimaryTokenUsageRecord] = field(default_factory=list)
-    primary_known: bool = False
-    secondary_known: bool = False
+    canonical: TokenUsage
+    sources: dict[str, Any] = field(default_factory=dict)
+    external_agent_logs_known: bool = False
     caveats: list[str] = field(default_factory=list)
 
 

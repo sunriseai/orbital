@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import unittest
 from pathlib import Path
@@ -15,8 +16,29 @@ from orbital_test_helpers import (
     wait_for_terminal_summary,
 )
 
+from orbital_mcp.acp_conformance import AcpConformanceExpectation, evaluate_acp_conformance  # noqa: E402
+
 
 class AcpAdapterConformanceFixtureTests(unittest.TestCase):
+    def test_conformance_report_lists_missing_expected_features(self) -> None:
+        transcript = '> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
+
+        report = evaluate_acp_conformance(
+            transcript,
+            AcpConformanceExpectation(
+                client_methods=["initialize", "session/new"],
+                server_methods=["session/update"],
+                session_updates=["agent_message_chunk"],
+                require_usage_payload=True,
+            ),
+        )
+
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["missing"]["client_methods"], ["session/new"])
+        self.assertEqual(report["missing"]["server_methods"], ["session/update"])
+        self.assertEqual(report["missing"]["session_updates"], ["agent_message_chunk"])
+        self.assertEqual(report["missing"]["usage_payload"], ["usage_payload"])
+
     def test_fake_acp_fixture_covers_core_protocol_and_primary_safe_filtering(self) -> None:
         tmp = ROOT / ".tmp-test-acp-conformance-core"
         try:
@@ -32,12 +54,23 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                         checks=["python3 -m pytest -q"],
                     ),
                     profile_id="fake_acp",
-                    timeout_seconds=5,
+                    timeout_seconds=30,
                 )
             )
             run_id = summary["run_id"]
 
             transcript = service.get_run_log_tail(run_id, "transcript.log", max_bytes=50_000)["text"]
+            conformance = evaluate_acp_conformance(
+                transcript,
+                AcpConformanceExpectation(
+                    client_methods=["initialize", "session/new", "session/prompt"],
+                    server_methods=["session/update"],
+                    session_updates=["agent_message_chunk", "tool_call", "tool_call_update"],
+                    result_statuses=["passed"],
+                    require_usage_payload=True,
+                    require_model_metadata=True,
+                ),
+            )
             protocol = _protocol_messages(transcript)
             sent_methods = [item["message"].get("method") for item in protocol if item["direction"] == ">"]
             received_methods = [item["message"].get("method") for item in protocol if item["direction"] == "<"]
@@ -48,6 +81,9 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
             ]
 
             self.assertEqual(summary["status"], "completed")
+            self.assertTrue(conformance["ok"], conformance)
+            self.assertIn("fake-acp-model", conformance["observed"]["models"])
+            self.assertEqual(conformance["observed"]["usage_payload_count"], 1)
             self.assertIn("# launch_env auth_mode=local_subscription", transcript)
             self.assertIn("initialize", sent_methods)
             self.assertIn("session/new", sent_methods)
@@ -59,7 +95,9 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
             self.assertTrue(any(item["message"].get("result", {}).get("status") == "passed" for item in protocol))
             self.assertEqual(summary["evidence"]["checks"][0]["status"], "passed")
             self.assertGreaterEqual(summary["evidence"]["tool_calls"]["completed"], 2)
-            self.assertEqual(summary["tokens"]["total"], 135)
+            self.assertFalse(summary["tokens"]["known"])
+            self.assertEqual(summary["token_sources"]["adapter_payloads"]["total"], 135)
+            self.assertFalse(summary["token_sources"]["external_agent_logs"]["known"])
             self.assertIn("fake-acp-model", summary["model"]["models"])
 
             raw_dialogue = service.get_dialogue(run_id, include_raw=True, include_agent_chunks=True)
@@ -97,7 +135,15 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
 
             self.assertEqual(summary["status"], "completed")
             self.assertEqual(resolution["permission"]["adapter_request_id"], "77")
+            self.assertEqual(resolution["permission"]["command_or_action"], "edit")
+            self.assertEqual(resolution["permission"]["paths"], ["fake_output.txt"])
+            self.assertEqual(resolution["permission"]["resources"], ["file:fake_output.txt"])
             self.assertEqual(resolution["permission"]["resolved_option_id"], "allow")
+            self.assertEqual(resolution["permission"]["decision_rationale"], "fake test approval")
+            self.assertEqual(
+                resolution["permission"]["adapter_result"],
+                {"outcome": {"outcome": "selected", "optionId": "allow"}},
+            )
             self.assertEqual(
                 [option["option_id"] for option in resolution["permission"]["options"]],
                 ["allow", "deny"],
@@ -109,6 +155,48 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
             permissions = _jsonl(tmp / ".orbital" / "runs" / run_id / "permissions.jsonl")
             self.assertEqual([item["status"] for item in permissions], ["pending", "approved"])
             self.assertTrue(all(item["adapter_request_id"] == "77" for item in permissions))
+            self.assertEqual(permissions[0]["command_or_action"], "edit")
+            self.assertIsNone(permissions[0]["resolved_option_id"])
+            self.assertEqual(permissions[1]["resolved_option_id"], "allow")
+            self.assertEqual(permissions[1]["decision_rationale"], "fake test approval")
+            self.assertEqual(permissions[1]["adapter_result"]["outcome"]["optionId"], "allow")
+
+            transcript = service.get_run_log_tail(run_id, "transcript.log", max_bytes=50_000)["text"]
+            conformance = evaluate_acp_conformance(
+                transcript,
+                AcpConformanceExpectation(permission_option_ids=["allow"]),
+            )
+            self.assertTrue(conformance["ok"], conformance)
+            permission_replies = [
+                item["message"]
+                for item in _protocol_messages(transcript)
+                if item["direction"] == ">"
+                and item["message"].get("id") == 77
+                and item["message"].get("result", {}).get("outcome")
+            ]
+            self.assertEqual(permission_replies[0]["result"]["outcome"]["optionId"], "allow")
+        finally:
+            remove_tree(tmp)
+
+    def test_fake_acp_codex_camel_permission_method_is_normalized(self) -> None:
+        tmp = ROOT / ".tmp-test-acp-conformance-codex-permission"
+        try:
+            tmp.mkdir(exist_ok=True)
+            service = fake_acp_service(tmp)
+
+            resolution, summary = run_async(_permission_approval_flow(service, tmp, codex_camel=True))
+            run_id = summary["run_id"]
+
+            self.assertEqual(summary["status"], "completed")
+            self.assertEqual(summary["permission_counts"]["permission_count"], 1)
+            self.assertEqual(summary["permission_counts"]["approved_permission_count"], 1)
+            self.assertEqual(resolution["permission"]["raw"]["method"], "requestPermission")
+            self.assertEqual(resolution["permission"]["adapter_request_id"], "77")
+            self.assertEqual(resolution["permission"]["resolved_option_id"], "allow")
+
+            permissions = _jsonl(tmp / ".orbital" / "runs" / run_id / "permissions.jsonl")
+            self.assertEqual([item["status"] for item in permissions], ["pending", "approved"])
+            self.assertEqual(permissions[0]["raw"]["method"], "requestPermission")
 
             transcript = service.get_run_log_tail(run_id, "transcript.log", max_bytes=50_000)["text"]
             permission_replies = [
@@ -122,8 +210,67 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
         finally:
             remove_tree(tmp)
 
+    def test_fake_acp_permission_denial_preserves_complete_round_trip(self) -> None:
+        tmp = ROOT / ".tmp-test-acp-conformance-permission-denial"
+        try:
+            tmp.mkdir(exist_ok=True)
+            service = fake_acp_service(tmp)
 
-async def _permission_approval_flow(service, tmp: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+            resolution, summary = run_async(_permission_denial_flow(service, tmp))
+            run_id = summary["run_id"]
+
+            self.assertEqual(summary["status"], "failed")
+            self.assertEqual(resolution["permission"]["status"], "denied")
+            self.assertEqual(resolution["permission"]["resolved_option_id"], "deny")
+            self.assertEqual(resolution["permission"]["decision_rationale"], "fake test denial")
+            self.assertEqual(resolution["permission"]["adapter_result"]["outcome"]["optionId"], "deny")
+            self.assertEqual(summary["permission_counts"]["denied_permission_count"], 1)
+
+            permissions = _jsonl(tmp / ".orbital" / "runs" / run_id / "permissions.jsonl")
+            self.assertEqual([item["status"] for item in permissions], ["pending", "denied"])
+            self.assertEqual(permissions[1]["adapter_result"]["outcome"]["optionId"], "deny")
+
+            transcript = service.get_run_log_tail(run_id, "transcript.log", max_bytes=50_000)["text"]
+            conformance = evaluate_acp_conformance(
+                transcript,
+                AcpConformanceExpectation(permission_option_ids=["deny"], result_statuses=["failed"]),
+            )
+            self.assertTrue(conformance["ok"], conformance)
+            permission_replies = [
+                item["message"]
+                for item in _protocol_messages(transcript)
+                if item["direction"] == ">"
+                and item["message"].get("id") == 77
+                and item["message"].get("result", {}).get("outcome")
+            ]
+            self.assertEqual(permission_replies[0]["result"]["outcome"]["optionId"], "deny")
+        finally:
+            remove_tree(tmp)
+
+
+async def _permission_approval_flow(service, tmp: Path, codex_camel: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
+    objective = "Implement fake task with permission."
+    if codex_camel:
+        objective += " CODEX_CAMEL_PERMISSION"
+    response = await service.start_task_run(
+        tmp,
+        task(objective, allowed_paths=["fake_output.txt"]),
+        profile_id="fake_acp",
+    )
+    run_id = response["run_id"]
+    permission_id = await wait_for_permission(service, run_id)
+    resolution = await service.resolve_permission(
+        run_id,
+        permission_id,
+        "approve",
+        option_id="allow",
+        rationale="fake test approval",
+    )
+    summary = await wait_for_terminal_summary(service, run_id)
+    return resolution, summary
+
+
+async def _permission_denial_flow(service, tmp: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     response = await service.start_task_run(
         tmp,
         task("Implement fake task with permission.", allowed_paths=["fake_output.txt"]),
@@ -131,8 +278,21 @@ async def _permission_approval_flow(service, tmp: Path) -> tuple[dict[str, Any],
     )
     run_id = response["run_id"]
     permission_id = await wait_for_permission(service, run_id)
-    resolution = await service.resolve_permission(run_id, permission_id, "approve")
-    summary = await wait_for_terminal_summary(service, run_id)
+    resolution = await service.resolve_permission(
+        run_id,
+        permission_id,
+        "deny",
+        option_id="deny",
+        rationale="fake test denial",
+    )
+    for _ in range(120):
+        summary = service.get_run_summary(run_id)
+        if summary["status"] == "failed":
+            return resolution, summary
+        await asyncio.sleep(0.05)
+    summary = service.get_run_summary(run_id)
+    if run_id in service._controllers:
+        await service.stop_task_run(run_id)
     return resolution, summary
 
 

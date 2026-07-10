@@ -9,11 +9,13 @@ LOG_FILE="$LOG_DIR/local_opencode_acp_smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
 PROFILE="opencode_acp_local"
 PROFILE_LABEL="OpenCode local ACP"
 PROFILE_REQUIREMENT="You should have your local OpenCode command installed and authenticated before starting this script."
+REQUIRED_COMMAND="opencode"
 TIMEOUT_SECONDS="${ORBITAL_REAL_HARNESS_TIMEOUT_SECONDS:-120}"
 FAILURES=0
 SMOKE_TMP=""
 SMOKE_BASE=""
 SMOKE_WORKDIR=""
+TOKEN_WORKDIR=""
 
 log() {
   printf '%s\n' "$*" | tee -a "$LOG_FILE"
@@ -65,7 +67,8 @@ setup_temp_dirs() {
   SMOKE_TMP="$(mktemp -d "${TMPDIR:-/tmp/}orbital-local-opencode-acp-smoke.XXXXXX")"
   SMOKE_BASE="$SMOKE_TMP/base"
   SMOKE_WORKDIR="$SMOKE_TMP/work"
-  mkdir -p "$SMOKE_BASE" "$SMOKE_WORKDIR"
+  TOKEN_WORKDIR="$SMOKE_TMP/token-work"
+  mkdir -p "$SMOKE_BASE" "$SMOKE_WORKDIR" "$TOKEN_WORKDIR"
 }
 
 cleanup_repo_artifacts() {
@@ -76,6 +79,28 @@ cleanup_repo_artifacts() {
     rm -rf "$SMOKE_TMP"
   fi
   log "Cleanup complete."
+}
+
+fail_summary() {
+  cleanup_repo_artifacts
+  run_cmd "git status after cleanup" git status --short
+  section "summary"
+  log "FAIL: manual $PROFILE smoke stopped before launch because prerequisite checks failed."
+  log "Review log: $LOG_FILE"
+  exit 1
+}
+
+require_command() {
+  section "required command: $REQUIRED_COMMAND"
+  local path
+  path="$(command -v "$REQUIRED_COMMAND" || true)"
+  if [[ -z "$path" ]]; then
+    log "FAIL: required command '$REQUIRED_COMMAND' was not found on PATH."
+    log "Install OpenCode or run this script from a shell where '$REQUIRED_COMMAND' is available, then rerun."
+    FAILURES=$((FAILURES + 1))
+    fail_summary
+  fi
+  log "$path"
 }
 
 run_opencode_acp_initialize_preflight() {
@@ -153,9 +178,11 @@ main() {
   log "timeout_seconds: $TIMEOUT_SECONDS"
   log "smoke_base: $SMOKE_BASE"
   log "smoke_workdir: $SMOKE_WORKDIR"
+  log "token_workdir: $TOKEN_WORKDIR"
 
   run_cmd "git status before smoke" git status --short
 
+  require_command
   run_opencode_acp_initialize_preflight
 
   run_cmd "source-tree doctor for local profile readiness" \
@@ -170,6 +197,15 @@ main() {
         --profile "$PROFILE" \
         --workdir "$SMOKE_WORKDIR" \
         --timeout-seconds "$TIMEOUT_SECONDS"
+
+  run_cmd "manual $PROFILE canonical token telemetry smoke" \
+    env PYTHONPATH="$ROOT_DIR/src" \
+      PYTHONDONTWRITEBYTECODE=1 \
+      ORBITAL_TOKEN_SMOKE_BASE="$SMOKE_BASE" \
+      ORBITAL_TOKEN_SMOKE_WORKDIR="$TOKEN_WORKDIR" \
+      ORBITAL_TOKEN_SMOKE_PROFILE="$PROFILE" \
+      ORBITAL_TOKEN_SMOKE_TIMEOUT="$TIMEOUT_SECONDS" \
+      python3 "$ROOT_DIR/tests/manual/run_token_probe.py"
 
   cleanup_repo_artifacts
 

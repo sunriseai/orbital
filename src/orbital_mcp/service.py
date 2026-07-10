@@ -11,6 +11,7 @@ from typing import Any
 from .adapters.acp import AcpWorkerController
 from .adapters.base import AdapterSink
 from .adapters.claude_cli import ClaudeCliController
+from .agent_log_telemetry import agent_log_token_usage, run_time_window, scan_external_agent_token_telemetry
 from .delegation_report import build_delegation_report
 from .dialogue import new_event
 from .events import (
@@ -47,6 +48,7 @@ from .models import (
     PermissionOption,
     PermissionRequest,
     PermissionEvidence,
+    ProfileCapabilities,
     RepairSeed,
     RunCounts,
     RunEvidence,
@@ -67,10 +69,12 @@ from .profiles import HarnessRegistry
 from .snapshots import FileSnapshot, compare_snapshots, snapshot_workdir
 from .store import RunStore
 from .task_prompt import render_startup_prompt
-from .telemetry import PrimaryTokenUsageRecord, extract_run_telemetry
+from .telemetry import extract_run_telemetry
 
 
 class TaskRunService:
+    LIVENESS_STOP_CHECK_MAX_AGE_SECONDS = 120.0
+
     def __init__(self, registry: HarnessRegistry, store: RunStore):
         self.registry = registry
         self.store = store
@@ -83,10 +87,15 @@ class TaskRunService:
 
     def preflight(self, workdir: Path, task: TaskInput | None = None, profile_id: str | None = None) -> dict[str, Any]:
         profile, readiness = self.registry.select(workdir, task=task, profile_id=profile_id)
+        capabilities = self.registry.capabilities(profile, readiness)
         return {
             "passed": readiness.ready,
             "selected_profile": to_jsonable(profile),
             "readiness": to_jsonable(readiness),
+            "support": to_jsonable(profile.support),
+            "classification": to_jsonable(profile.classification),
+            "normalized_capabilities": to_jsonable(capabilities),
+            "capability_gaps": _preflight_capability_gaps(task, capabilities),
             "expected_auth_mode": profile.auth_mode,
             "expected_cost_posture": profile.cost_posture,
             "metered_api": profile.metered_api,
@@ -220,6 +229,8 @@ class TaskRunService:
                 changed_file_count=len(summary.changed_files),
                 warning_codes=[warning.code for warning in summary.warning_details],
                 failure_classification=summary.failure_classification,
+                evidence_status=summary.evidence_status,
+                evidence_score=summary.evidence_score,
                 requested_checks=summary.evidence.checks,
                 pending_permission_count=len(summary.pending_permission_requests),
                 tool_counts=summary.evidence.tool_calls,
@@ -306,7 +317,6 @@ class TaskRunService:
                 "create_delegation_ticket",
                 "start_ticket_run",
                 "start_task_run",
-                "record_primary_token_usage",
                 "record_attempt_review",
                 "record_delegation_run_assessment",
                 "get_delegation_session",
@@ -563,62 +573,6 @@ class TaskRunService:
             "session_warnings": to_jsonable(session.session_warnings),
         }
 
-    def record_primary_token_usage(
-        self,
-        session_id: str,
-        source: str,
-        run_id: str | None = None,
-        scope: str | None = None,
-        model: str | None = None,
-        input_tokens: int | None = None,
-        output_tokens: int | None = None,
-        cache_tokens: int | None = None,
-        total_tokens: int | None = None,
-        notes: str | None = None,
-    ) -> dict[str, Any]:
-        self.store.load_session(session_id)
-        if run_id is not None:
-            self.store.load_run(run_id)
-        if not source or not source.strip():
-            raise ValueError("source is required")
-        token_counts = {
-            "input_tokens": _validate_token_count("input_tokens", input_tokens),
-            "output_tokens": _validate_token_count("output_tokens", output_tokens),
-            "cache_tokens": _validate_token_count("cache_tokens", cache_tokens),
-            "total_tokens": _validate_token_count("total_tokens", total_tokens),
-        }
-        if all(value is None for value in token_counts.values()):
-            raise ValueError("at least one token count is required")
-        computed_total = token_counts["total_tokens"]
-        if computed_total is None:
-            computed_total = sum(
-                value
-                for value in (
-                    token_counts["input_tokens"],
-                    token_counts["output_tokens"],
-                    token_counts["cache_tokens"],
-                )
-                if value is not None
-            )
-        record = PrimaryTokenUsageRecord(
-            timestamp=_utc_now(),
-            source=source.strip(),
-            scope=scope.strip() if isinstance(scope, str) and scope.strip() else None,
-            run_id=run_id,
-            model=model.strip() if isinstance(model, str) and model.strip() else None,
-            input=token_counts["input_tokens"],
-            output=token_counts["output_tokens"],
-            cache=token_counts["cache_tokens"],
-            total=computed_total,
-            notes=notes.strip() if isinstance(notes, str) and notes.strip() else None,
-        )
-        self.store.append_primary_token_usage(session_id, record)
-        report = self.get_delegation_report(session_id=session_id)
-        return {
-            "record": to_jsonable(record),
-            "token_accounting": report["token_accounting"],
-        }
-
     def get_delegation_session(self, session_id: str) -> dict[str, Any]:
         session_obj = _session_from_dict(self.store.load_session(session_id))
         self._refresh_session_warnings(session_obj)
@@ -696,6 +650,9 @@ class TaskRunService:
         permission_id: str,
         decision: str,
         option_id: str | None = None,
+        rationale: str | None = None,
+        adapter_request_id: str | None = None,
+        deciding_primary: str | None = None,
     ) -> dict[str, Any]:
         if decision not in {"approve", "deny"}:
             raise ValueError("decision must be approve or deny")
@@ -711,13 +668,37 @@ class TaskRunService:
             raise ValueError(f"unknown permission: {permission_id}")
         if permission.status != "pending":
             raise ValueError(f"permission is already resolved: {permission.status}")
+        if adapter_request_id is not None and str(adapter_request_id) != permission.adapter_request_id:
+            raise ValueError(
+                f"unknown adapter request for permission {permission.permission_id}: {adapter_request_id}"
+            )
         selected = choose_option(permission, decision, option_id)
         controller = self._controllers.get(run_id)
         if not controller:
             raise ValueError(f"run is not active: {run_id}")
-        await controller.resolve_permission(permission.adapter_request_id, selected)
+        try:
+            adapter_result = await controller.resolve_permission(permission.adapter_request_id, selected)
+        except Exception as exc:
+            permission.decision = decision  # type: ignore[assignment]
+            permission.resolved_option_id = selected
+            permission.decision_rationale = rationale.strip() if isinstance(rationale, str) and rationale.strip() else None
+            permission.deciding_primary = _clean_optional_text(deciding_primary)
+            permission.resolved_at = _utc_now()
+            permission.adapter_resolution_status = "failed"
+            permission.adapter_result = {
+                "error": str(exc) or exc.__class__.__name__,
+                "exception_type": exc.__class__.__name__,
+            }
+            self.store.append_permission(permission)
+            raise ValueError(f"adapter_permission_resolution_failed: {permission.permission_id}: {exc}") from exc
         permission.status = "approved" if decision == "approve" else "denied"
+        permission.decision = decision  # type: ignore[assignment]
         permission.resolved_option_id = selected
+        permission.decision_rationale = rationale.strip() if isinstance(rationale, str) and rationale.strip() else None
+        permission.deciding_primary = _clean_optional_text(deciding_primary)
+        permission.resolved_at = _utc_now()
+        permission.adapter_resolution_status = _adapter_resolution_status(adapter_result, selected)
+        permission.adapter_result = adapter_result if isinstance(adapter_result, dict) else None
         run = self._get_run(run_id)
         if permission.status == "approved":
             run.counts.approved_permission_count += 1
@@ -727,7 +708,22 @@ class TaskRunService:
             run.status = "blocked"
         self.store.append_permission(permission)
         self.store.save_run(run)
-        await self._append_event(run_id, f"permission_{permission.status}", "host", permission.summary)
+        await self._append_event(
+            run_id,
+            f"permission_{permission.status}",
+            "host",
+            permission.summary,
+            {
+                "permission_id": permission.permission_id,
+                "adapter_request_id": permission.adapter_request_id,
+                "resolved_option_id": permission.resolved_option_id,
+                "decision": permission.decision,
+                "decision_rationale": permission.decision_rationale,
+                "deciding_primary": permission.deciding_primary,
+                "adapter_resolution_status": permission.adapter_resolution_status,
+                "adapter_result": permission.adapter_result,
+            },
+        )
         return {"permission": to_jsonable(permission), "run": self._public_run_response(run_id)}
 
     async def stop_task_run(self, run_id: str) -> dict[str, Any]:
@@ -883,12 +879,19 @@ class TaskRunService:
         for session in self._sessions_containing_run(run_id):
             check = session.last_liveness_checks.get(run_id) or {}
             recommendation = check.get("recommendation") if isinstance(check.get("recommendation"), dict) else {}
-            if recommendation.get("stop_allowed") is True or recommendation.get("action") == "stop":
+            check_age = _seconds_since_iso(check.get("timestamp"))
+            recent = check_age is not None and check_age <= self.LIVENESS_STOP_CHECK_MAX_AGE_SECONDS
+            if recent and (recommendation.get("stop_allowed") is True or recommendation.get("action") == "stop"):
                 continue
+            reason_bits = [
+                f"last_verdict={check.get('verdict') or 'none'}",
+                f"last_action={recommendation.get('action') or 'none'}",
+                f"last_check_age_seconds={check_age:.1f}" if check_age is not None else "last_check_age_seconds=unknown",
+            ]
             _add_session_warning(
                 session,
                 "stop_without_liveness_check",
-                f"Run {run_id} was stopped without a recent stop-allowed liveness recommendation.",
+                f"Run {run_id} was stopped without a recent stop-allowed liveness recommendation ({', '.join(reason_bits)}).",
                 severity="warning",
             )
             self.store.save_session(session)
@@ -1054,7 +1057,19 @@ class TaskRunService:
             for item in final_report.get("file_attribution", run.get("file_attribution", []))
         ]
         evidence = _run_evidence(run, all_dialogue, permissions)
-        telemetry = extract_run_telemetry(self.store.run_dir(run_id), all_dialogue)
+        adapter_telemetry = extract_run_telemetry(self.store.run_dir(run_id), all_dialogue)
+        since, until = run_time_window(all_dialogue)
+        external_agent_logs = scan_external_agent_token_telemetry(
+            project=run.get("workdir"),
+            since=since,
+            until=until,
+            require_unique=True,
+        )
+        canonical_tokens = agent_log_token_usage(external_agent_logs)
+        token_sources = {
+            "external_agent_logs": external_agent_logs,
+            "adapter_payloads": adapter_telemetry.tokens,
+        }
         warning_details = _run_warning_details(
             run=run,
             final_report=final_report,
@@ -1067,6 +1082,9 @@ class TaskRunService:
         warnings = [warning.message for warning in warning_details]
         if run.get("last_error") and run["last_error"] not in warnings:
             warnings.append(run["last_error"])
+        evidence_groups = _evidence_groups(warning_details)
+        evidence_status = _evidence_status(evidence_groups)
+        evidence_score = _evidence_score(evidence_groups)
 
         status = normalize_run_status(run.get("status"))
         normalized_run = {**run, "status": status}
@@ -1090,8 +1108,12 @@ class TaskRunService:
             permission_counts=_run_counts_from_dict(run.get("counts", {})),
             tool_timeline=tool_timeline,
             evidence=evidence,
-            tokens=telemetry.tokens,
-            model=telemetry.model,
+            evidence_status=evidence_status,
+            evidence_score=evidence_score,
+            evidence_groups=evidence_groups,
+            tokens=canonical_tokens,
+            token_sources=token_sources,
+            model=adapter_telemetry.model,
             warnings=warnings,
             warning_details=warning_details,
             failure_classification=_failure_classification(
@@ -1149,6 +1171,7 @@ class TaskRunService:
             "missing_requested_check",
             "failed_requested_check",
             "unknown_requested_check",
+            "worker_claim_without_evidence",
             "no_op_pass",
             "no_completed_tool_calls",
             "changed_outside_allowed_paths",
@@ -1159,7 +1182,17 @@ class TaskRunService:
             "incomplete_changed_files",
         }
         matched_repair = sorted(set(reason_codes) & repair_reasons)
-        if matched_repair or any(warning.severity == "error" for warning in summary.warning_details):
+        if summary.evidence_status == "blocked":
+            blocking_codes = [warning.code for warning in summary.evidence_groups.get("blocking", [])]
+            return RunPolicyVerdict(
+                schema_version=1,
+                run_id=summary.run_id,
+                policy_verdict="reject",
+                reason_codes=sorted(set(reason_codes or blocking_codes)),
+                recommended_action="reject_and_create_policy_compliant_repair",
+                repair_seed=_repair_seed(summary, source_ticket),
+            )
+        if matched_repair or summary.evidence_status == "repair_needed" or any(warning.severity == "error" for warning in summary.warning_details):
             return RunPolicyVerdict(
                 schema_version=1,
                 run_id=summary.run_id,
@@ -1270,6 +1303,8 @@ class _ServiceSink(AdapterSink):
         run = self.service._get_run(self.run_id)
         run.counts.permission_count += 1
         run.status = "waiting_for_permission"
+        permission.requested_at = permission.requested_at or _utc_now()
+        permission.raw_ref = permission.raw_ref or str(run.log_refs.permissions if run.log_refs else "")
         self.service._permissions[permission.permission_id] = permission
         self.service.store.append_permission(permission)
         self.service.store.save_run(run)
@@ -1294,6 +1329,24 @@ def _harness_metadata(profile: HarnessProfile) -> HarnessRunMetadata:
         cost_posture=profile.cost_posture,
         metered_api=profile.metered_api,
     )
+
+
+def _preflight_capability_gaps(task: TaskInput | None, capabilities: ProfileCapabilities) -> list[str]:
+    if not task:
+        return []
+    required: set[str] = set()
+    if task.checks:
+        required.add("tool_events")
+    if any("permission" in item.lower() for item in [task.objective, *task.constraints, *task.rules]):
+        required.add("permissions")
+    capability_map = {
+        "dialogue": capabilities.supports_dialogue,
+        "permissions": capabilities.supports_permissions,
+        "tool_events": capabilities.supports_tool_events,
+        "stop": capabilities.supports_stop,
+        "followup_messages": capabilities.supports_followup_messages,
+    }
+    return sorted(capability for capability in required if not capability_map.get(capability))
 
 
 def _controller_for_profile(
@@ -1364,10 +1417,15 @@ def _permission_from_dict(value: dict[str, Any]) -> PermissionRequest:
         permission_id=value["permission_id"],
         run_id=value["run_id"],
         adapter_request_id=str(value["adapter_request_id"]),
+        schema_version=int(value.get("schema_version", 1)),
         status=value.get("status", "pending"),
         summary=value.get("summary", ""),
         risk=value.get("risk", "unknown"),
+        command_or_action=value.get("command_or_action"),
+        action=value.get("action"),
+        command=value.get("command"),
         paths=list(value.get("paths", [])),
+        resources=list(value.get("resources", [])),
         options=[
             PermissionOption(
                 option_id=option["option_id"],
@@ -1377,7 +1435,15 @@ def _permission_from_dict(value: dict[str, Any]) -> PermissionRequest:
             for option in value.get("options", [])
         ],
         raw=value.get("raw", {}),
+        raw_ref=value.get("raw_ref"),
+        requested_at=value.get("requested_at"),
+        resolved_at=value.get("resolved_at"),
+        decision=value.get("decision"),
         resolved_option_id=value.get("resolved_option_id"),
+        decision_rationale=value.get("decision_rationale"),
+        deciding_primary=value.get("deciding_primary"),
+        adapter_resolution_status=value.get("adapter_resolution_status"),
+        adapter_result=value.get("adapter_result"),
     )
 
 
@@ -1588,18 +1654,18 @@ def _run_warning_details(
         for check in evidence.checks:
             if not check.observed:
                 add(
-                    "requested_check_missing",
+                    "missing_requested_check",
                     f"Requested check was not observed: {check.command}",
                 )
             elif check.status == "failed":
                 add(
-                    "requested_check_failed",
+                    "failed_requested_check",
                     f"Requested check failed: {check.command}",
                     "error",
                 )
             elif check.status == "unknown":
                 add(
-                    "requested_check_unknown",
+                    "unknown_requested_check",
                     f"Requested check result was not structured: {check.command}",
                     "info",
                 )
@@ -1631,7 +1697,77 @@ def _run_warning_details(
             "writes_without_detected_file_changes",
             "Run had completed write/edit tool calls but no file changes were detected.",
         )
+    if (
+        status == "completed"
+        and (final_report.get("final_response") or run.get("last_agent_message"))
+        and not changed_since_run_start
+        and evidence.tool_calls.completed == 0
+        and not any(check.status == "passed" for check in evidence.checks)
+    ):
+        add(
+            "worker_claim_without_evidence",
+            "Worker reported completion, but Orbital found no edits, completed tool calls, or passed requested checks.",
+        )
     return warnings
+
+
+BLOCKING_EVIDENCE_WARNING_CODES = {
+    "changed_forbidden_paths",
+    "policy_violation",
+}
+
+REPAIR_EVIDENCE_WARNING_CODES = {
+    "acceptance_check_failed",
+    "failed_requested_check",
+    "missing_requested_check",
+    "no_changed_files",
+    "no_completed_tool_calls",
+    "unknown_requested_check",
+    "worker_claim_without_evidence",
+    "changed_outside_allowed_paths",
+    "writes_without_detected_file_changes",
+    "malformed_final_report",
+    "last_error",
+}
+
+
+def _evidence_groups(warnings: list[RunWarning]) -> dict[str, list[RunWarning]]:
+    groups: dict[str, list[RunWarning]] = {
+        "blocking": [],
+        "repair": [],
+        "review": [],
+        "info": [],
+    }
+    for warning in warnings:
+        if warning.code in BLOCKING_EVIDENCE_WARNING_CODES:
+            groups["blocking"].append(warning)
+        elif warning.code in REPAIR_EVIDENCE_WARNING_CODES or warning.severity == "error":
+            groups["repair"].append(warning)
+        elif warning.severity == "info":
+            groups["info"].append(warning)
+        else:
+            groups["review"].append(warning)
+    return groups
+
+
+def _evidence_status(groups: dict[str, list[RunWarning]]) -> str:
+    if groups.get("blocking"):
+        return "blocked"
+    if groups.get("repair"):
+        return "repair_needed"
+    if groups.get("review") or groups.get("info"):
+        return "review_needed"
+    return "complete"
+
+
+def _evidence_score(groups: dict[str, list[RunWarning]]) -> int:
+    penalty = (
+        60 * len(groups.get("blocking", []))
+        + 25 * len(groups.get("repair", []))
+        + 10 * len(groups.get("review", []))
+        + 5 * len(groups.get("info", []))
+    )
+    return max(0, 100 - penalty)
 
 
 def _tool_kind(event: dict[str, Any]) -> str:
@@ -1754,12 +1890,14 @@ def _failure_classification(
         codes.discard("worker_error")
     if "acceptance_check_failed" in warning_codes:
         codes.add("acceptance_check_failed")
-    if "requested_check_missing" in warning_codes:
+    if "missing_requested_check" in warning_codes or "requested_check_missing" in warning_codes:
         codes.add("missing_requested_check")
-    if "requested_check_failed" in warning_codes:
+    if "failed_requested_check" in warning_codes or "requested_check_failed" in warning_codes:
         codes.add("failed_requested_check")
-    if "requested_check_unknown" in warning_codes:
+    if "unknown_requested_check" in warning_codes or "requested_check_unknown" in warning_codes:
         codes.add("unknown_requested_check")
+    if "worker_claim_without_evidence" in warning_codes:
+        codes.add("worker_claim_without_evidence")
     if "no_changed_files" in warning_codes:
         codes.add("no_op_pass")
     if "no_completed_tool_calls" in warning_codes:
@@ -1777,6 +1915,36 @@ def _failure_classification(
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _seconds_since_iso(value: Any) -> float | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(UTC) - timestamp.astimezone(UTC)).total_seconds())
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _adapter_resolution_status(adapter_result: Any, selected_option_id: str) -> str:
+    if not isinstance(adapter_result, dict):
+        return "ignored"
+    if adapter_result.get("error"):
+        return "failed"
+    outcome = adapter_result.get("outcome")
+    if isinstance(outcome, dict):
+        if outcome.get("optionId") == selected_option_id and outcome.get("outcome") in {None, "selected"}:
+            return "accepted"
+        if outcome.get("outcome") in {"rejected", "failed", "error"}:
+            return "rejected"
+    return "ignored"
 
 
 def _assessment_from_dict(value: dict[str, Any]) -> DelegationRunAssessment:

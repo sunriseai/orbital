@@ -14,7 +14,7 @@ def default_profiles() -> list[HarnessProfile]:
     return [
         HarnessProfile(
             id="codex_acp_local",
-            display_name="Codex local subscription",
+            display_name="Codex local subscription (Zed legacy)",
             adapter="acp",
             runtime_family="codex",
             command=["codex-acp"],
@@ -30,6 +30,33 @@ def default_profiles() -> list[HarnessProfile]:
                 locality="subscription",
             ),
             support=ProfileSupport(tier="experimental_acp", notes=["Requires local codex-acp command."]),
+            block_mcp_servers="orbital,prism,codex-acp,github",
+        ),
+        HarnessProfile(
+            id="codex_acp_official",
+            display_name="Codex official ACP app-server adapter",
+            adapter="acp",
+            runtime_family="codex",
+            command=["npx", "-y", "@agentclientprotocol/codex-acp"],
+            auth_mode="local_subscription",
+            cost_posture="subscription_preferred",
+            capabilities=["dialogue", "permissions", "stop"],
+            classification=ProfileClassification(
+                task_tags=["implementation", "test_repair", "analysis", "long_context"],
+                strengths=["official maintained Codex ACP adapter", "Codex App Server event coverage"],
+                limits=["requires npx and package download/cache", "requires local Codex authentication"],
+                max_recommended_scope="medium",
+                cost_preference="subscription_preferred",
+                locality="subscription",
+            ),
+            support=ProfileSupport(
+                tier="experimental_acp",
+                notes=[
+                    "Official @agentclientprotocol/codex-acp app-server adapter.",
+                    "Uses INITIAL_AGENT_MODE=read-only so edit and command probes should exercise approval mediation.",
+                ],
+            ),
+            env={"INITIAL_AGENT_MODE": "read-only"},
             block_mcp_servers="orbital,prism,codex-acp,github",
         ),
         HarnessProfile(

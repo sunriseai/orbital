@@ -58,7 +58,7 @@ class DocsTodoTests(unittest.TestCase):
             "atomic writes",
             "permission_not_resolvable_after_restart",
             "policy level: `prompt_only`, `adapter_mediated`, `process_observed`, or `sandbox_enforced`",
-            "exact primary, secondary, combined, and external model-log telemetry",
+            "canonical local agent-log telemetry",
             "fake ACP harness",
             "CI-Safe Validation",
             "no clicks",
@@ -68,11 +68,16 @@ class DocsTodoTests(unittest.TestCase):
             "claude_agent_acp_api",
             "claude_code_cli_local",
             "claude-agent-acp",
+            "codex_acp_official",
+            "@agentclientprotocol/codex-acp",
             "ANTHROPIC_API_KEY",
-            "OpenCode `1.17.11`",
+            "OpenCode `1.17.13`",
             "ACP `protocolVersion=1`",
             "experimental_acp",
             "adding a new ACP harness",
+            "primary-mediated approval",
+            "without constant manual user approval",
+            "complete permission round trip",
         ]
         for phrase in required_phrases:
             self.assertIn(phrase, self.todo)
@@ -131,9 +136,10 @@ class DocsTodoTests(unittest.TestCase):
         self.assertNotIn("claude_code_acp_local", self.roadmap)
 
     def test_opencode_smoke_evidence_does_not_imply_known_good(self) -> None:
-        self.assertIn("OpenCode `1.17.11`", self.tech)
+        self.assertIn("OpenCode `1.17.13`", self.tech)
         self.assertIn("ACP `protocolVersion=1`", self.tech)
-        self.assertIn("Manual local ACP smoke currently covers Codex and OpenCode", self.roadmap)
+        self.assertIn("Manual local ACP smoke currently covers legacy Codex ACP and OpenCode", self.roadmap)
+        self.assertIn("codex_acp_official", self.roadmap)
         self.assertIn("Keep smoke-verified profiles at `experimental_acp`", self.todo)
         self.assertIn("Do not promote to known_good_acp until adapter conformance fixtures pass.", self.tech)
 

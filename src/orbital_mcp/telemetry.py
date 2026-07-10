@@ -48,20 +48,6 @@ class TokenUsage:
 
 
 @dataclass
-class PrimaryTokenUsageRecord:
-    timestamp: str
-    source: str
-    scope: str | None = None
-    run_id: str | None = None
-    model: str | None = None
-    input: int | None = None
-    output: int | None = None
-    cache: int | None = None
-    total: int | None = None
-    notes: str | None = None
-
-
-@dataclass
 class RunTelemetry:
     tokens: TokenUsage
     model: ModelTelemetry
@@ -118,30 +104,6 @@ def aggregate_tokens(values: list[TokenUsage | TokenUsageRecord], *, source: str
     )
 
 
-def aggregate_primary_tokens(records: list[PrimaryTokenUsageRecord], *, source: str) -> TokenUsage:
-    token_records = [
-        TokenUsageRecord(
-            source=record.source,
-            input=record.input,
-            output=record.output,
-            cache=record.cache,
-            total=record.total,
-        )
-        for record in records
-    ]
-    if not token_records:
-        return TokenUsage(known=False, source="not_available")
-    return TokenUsage(
-        known=True,
-        source=source,
-        input=_sum_optional(*(record.input for record in token_records)),
-        output=_sum_optional(*(record.output for record in token_records)),
-        cache=_sum_optional(*(record.cache for record in token_records)),
-        total=_sum_optional(*(record.total for record in token_records)),
-        records=token_records,
-    )
-
-
 def sum_token_usages(values: list[TokenUsage], *, source: str) -> TokenUsage:
     known_values = [value for value in values if value.known]
     if not known_values:
@@ -154,19 +116,6 @@ def sum_token_usages(values: list[TokenUsage], *, source: str) -> TokenUsage:
         cache=_sum_optional(*(value.cache for value in known_values)),
         total=_sum_optional(*(value.total for value in known_values)),
         records=[record for value in known_values for record in value.records],
-    )
-
-
-def combine_token_usage(primary: TokenUsage, secondary: TokenUsage) -> TokenUsage:
-    if not primary.known or not secondary.known or primary.total is None or secondary.total is None:
-        return TokenUsage(known=False, source="not_available")
-    return TokenUsage(
-        known=True,
-        source="primary_secondary",
-        input=_sum_if_all_known(primary.input, secondary.input),
-        output=_sum_if_all_known(primary.output, secondary.output),
-        cache=_sum_if_all_known(primary.cache, secondary.cache),
-        total=primary.total + secondary.total,
     )
 
 
@@ -229,24 +178,53 @@ def _looks_like_usage(value: dict[str, Any]) -> bool:
         keys
         & {
             "input_tokens",
+            "inputTokens",
             "prompt_tokens",
+            "promptTokens",
             "output_tokens",
+            "outputTokens",
             "completion_tokens",
+            "completionTokens",
             "total_tokens",
+            "totalTokens",
             "cache_creation_input_tokens",
+            "cacheCreationInputTokens",
             "cache_read_input_tokens",
+            "cacheReadInputTokens",
+            "cached_input_tokens",
+            "cachedInputTokens",
+            "cachedReadTokens",
         }
     )
 
 
 def _usage_record(value: dict[str, Any], *, source: str, event_id: str | None) -> TokenUsageRecord:
-    input_tokens = _int_or_none(value.get("input_tokens")) or _int_or_none(value.get("prompt_tokens"))
-    output_tokens = _int_or_none(value.get("output_tokens")) or _int_or_none(value.get("completion_tokens"))
+    input_tokens = (
+        _int_or_none(value.get("input_tokens"))
+        or _int_or_none(value.get("inputTokens"))
+        or _int_or_none(value.get("prompt_tokens"))
+        or _int_or_none(value.get("promptTokens"))
+    )
+    output_tokens = (
+        _int_or_none(value.get("output_tokens"))
+        or _int_or_none(value.get("outputTokens"))
+        or _int_or_none(value.get("completion_tokens"))
+        or _int_or_none(value.get("completionTokens"))
+    )
     cache_tokens = _sum_optional(
         _int_or_none(value.get("cache_creation_input_tokens")),
+        _int_or_none(value.get("cacheCreationInputTokens")),
         _int_or_none(value.get("cache_read_input_tokens")),
+        _int_or_none(value.get("cacheReadInputTokens")),
+        _int_or_none(value.get("cached_input_tokens")),
+        _int_or_none(value.get("cachedInputTokens")),
+        _int_or_none(value.get("cachedReadTokens")),
     )
-    total_tokens = _int_or_none(value.get("total_tokens")) or _sum_optional(input_tokens, output_tokens, cache_tokens)
+    total_tokens = (
+        _int_or_none(value.get("total_tokens"))
+        or _int_or_none(value.get("totalTokens"))
+        or _sum_optional(input_tokens, output_tokens, cache_tokens)
+    )
     return TokenUsageRecord(
         source=source,
         input=input_tokens,
@@ -269,9 +247,3 @@ def _int_or_none(value: Any) -> int | None:
 def _sum_optional(*values: int | None) -> int | None:
     known = [value for value in values if value is not None]
     return sum(known) if known else None
-
-
-def _sum_if_all_known(*values: int | None) -> int | None:
-    if any(value is None for value in values):
-        return None
-    return sum(value for value in values if value is not None)

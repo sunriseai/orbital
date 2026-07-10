@@ -173,15 +173,23 @@ def main() -> None:
                 send_check("fake-check-failed", "python3 -m pytest -q", 1, "1 failed in 0.01s\n")
             if "with permission" in prompt.lower():
                 ambiguous = "AMBIGUOUS_PERMISSION" in prompt
+                codex_camel = "CODEX_CAMEL_PERMISSION" in prompt
                 send(
                     {
                         "jsonrpc": "2.0",
                         "id": 77,
-                        "method": "session/request_permission",
+                        "method": "requestPermission" if codex_camel else "session/request_permission",
                         "params": {
                             "summary": "Edit fake_output.txt",
                             "risk": "file_edit",
+                            "action": "edit",
+                            "resources": ["file:fake_output.txt"],
                             "paths": ["fake_output.txt"],
+                            "toolCall": {
+                                "title": "write fake_output.txt",
+                                "kind": "edit",
+                                "rawInput": {"command": "write fake_output.txt", "filePath": "fake_output.txt"},
+                            },
                             "options": (
                                 [
                                     {"id": "allow-read", "label": "Allow read", "kind": "allow"},

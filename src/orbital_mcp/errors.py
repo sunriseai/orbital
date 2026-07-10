@@ -49,6 +49,10 @@ def _code_for_message(message: str) -> str:
     lowered = message.lower()
     if "permission_not_resolvable_after_restart" in lowered:
         return "permission_not_resolvable_after_restart"
+    if "adapter_permission_resolution_failed" in lowered:
+        return "adapter_permission_resolution_failed"
+    if "unknown adapter request" in lowered:
+        return "unknown_adapter_request"
     if "unknown permission" in lowered:
         return "unknown_permission"
     if "already resolved" in lowered:
@@ -79,6 +83,8 @@ def _code_for_message(message: str) -> str:
 def _user_action(code: str) -> str | None:
     return {
         "permission_not_resolvable_after_restart": "Start a new run or reattach the adapter when supported.",
+        "adapter_permission_resolution_failed": "Refresh the run summary; the decision was recorded but the adapter did not accept it.",
+        "unknown_adapter_request": "Refresh the run summary and resolve the listed adapter_request_id for that permission.",
         "unknown_permission": "Refresh the run summary and use a listed pending permission_id.",
         "permission_already_resolved": "Refresh the run summary before sending another decision.",
         "ambiguous_permission_option": "Pass an explicit adapter option_id.",

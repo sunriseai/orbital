@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from orbital_mcp.events import POLICY_VIOLATION  # noqa: E402
 from orbital_mcp.liveness import analyze_run_liveness  # noqa: E402
 from orbital_mcp.models import (  # noqa: E402
     HarnessConfig,
+    DelegationSession,
     HarnessProfile,
     HarnessRunMetadata,
     PermissionOption,
@@ -36,6 +38,7 @@ from orbital_mcp.service import TaskRunService  # noqa: E402
 from orbital_mcp.snapshots import compare_snapshots, snapshot_workdir  # noqa: E402
 from orbital_mcp.store import RunStore  # noqa: E402
 from orbital_mcp.task_prompt import render_startup_prompt  # noqa: E402
+from orbital_mcp.telemetry import extract_run_telemetry  # noqa: E402
 
 
 class OrbitalCoreTests(unittest.TestCase):
@@ -71,6 +74,43 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertFalse(acp.enabled)
         self.assertTrue(acp.metered_api)
         self.assertEqual(acp.support.tier, "profile_template")
+
+    def test_default_profiles_include_official_codex_acp_side_by_side_with_legacy(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+
+        legacy = next(item for item in config.profiles if item.id == "codex_acp_local")
+        self.assertEqual(legacy.command, ["codex-acp"])
+        self.assertIn("Zed legacy", legacy.display_name)
+        self.assertEqual(legacy.support.tier, "experimental_acp")
+
+        official = next(item for item in config.profiles if item.id == "codex_acp_official")
+        self.assertEqual(official.command, ["npx", "-y", "@agentclientprotocol/codex-acp"])
+        self.assertEqual(official.auth_mode, "local_subscription")
+        self.assertEqual(official.cost_posture, "subscription_preferred")
+        self.assertEqual(official.env["INITIAL_AGENT_MODE"], "read-only")
+        self.assertIn("permissions", official.capabilities)
+        self.assertEqual(official.support.tier, "experimental_acp")
+
+    def test_telemetry_extracts_official_codex_acp_camel_case_usage_result(self) -> None:
+        tmp = ROOT / ".tmp-test-codex-acp-camel-usage"
+        tmp.mkdir(exist_ok=True)
+        try:
+            (tmp / "transcript.log").write_text(
+                '< {"jsonrpc":"2.0","id":3,"result":{"usage":{"totalTokens":19408,'
+                '"inputTokens":540,"cachedReadTokens":18816,"outputTokens":52}}}\n',
+                encoding="utf-8",
+            )
+
+            telemetry = extract_run_telemetry(tmp, [])
+        finally:
+            (tmp / "transcript.log").unlink(missing_ok=True)
+            tmp.rmdir()
+
+        self.assertTrue(telemetry.tokens.known)
+        self.assertEqual(telemetry.tokens.input, 540)
+        self.assertEqual(telemetry.tokens.cache, 18816)
+        self.assertEqual(telemetry.tokens.output, 52)
+        self.assertEqual(telemetry.tokens.total, 19408)
 
     def test_claude_agent_acp_readiness_requires_explicit_setup(self) -> None:
         config = load_config(Path("/tmp/orbital-config-does-not-exist"))
@@ -137,7 +177,46 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertEqual(config.profiles[0].support.tier, "known_good_acp")
 
     def test_recommend_harness_profiles_is_deterministic_and_explicit_about_caveats(self) -> None:
-        registry = HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist")))
+        local = HarnessProfile(
+            id="opencode_acp_local",
+            display_name="OpenCode local",
+            adapter="acp",
+            runtime_family="opencode",
+            command=[sys.executable],
+            auth_mode="local_subscription",
+            cost_posture="subscription_preferred",
+            capabilities=["dialogue", "permissions"],
+        )
+        local.classification.task_tags = ["fast_smoke"]
+        local.classification.locality = "subscription"
+        local.support.tier = "experimental_acp"
+        codex = HarnessProfile(
+            id="codex_acp_local",
+            display_name="Codex local",
+            adapter="acp",
+            runtime_family="codex",
+            command=[sys.executable],
+            auth_mode="local_subscription",
+            cost_posture="subscription_preferred",
+            capabilities=["dialogue", "permissions"],
+        )
+        codex.classification.task_tags = ["implementation"]
+        codex.classification.locality = "subscription"
+        codex.support.tier = "experimental_acp"
+        metered = HarnessProfile(
+            id="opencode_acp_glm52",
+            display_name="OpenCode GLM",
+            adapter="acp",
+            runtime_family="opencode",
+            command=[sys.executable],
+            auth_mode="api_key",
+            cost_posture="metered_api",
+            capabilities=["dialogue", "permissions"],
+        )
+        metered.classification.task_tags = ["fast_smoke"]
+        metered.classification.locality = "subscription"
+        metered.support.tier = "experimental_acp"
+        registry = HarnessRegistry(HarnessConfig(default_profile="opencode_acp_local", profiles=[codex, local, metered]))
 
         result = registry.recommend(
             task_tags=["fast_smoke"],
@@ -155,9 +234,14 @@ class OrbitalCoreTests(unittest.TestCase):
         )["recommendations"])
         self.assertEqual(recommendations[0]["profile_id"], "opencode_acp_local")
         self.assertIn("fast_smoke", recommendations[0]["matched_task_tags"])
+        self.assertEqual(recommendations[0]["recommendation_factors"]["matched_tags"], ["fast_smoke"])
+        self.assertEqual(recommendations[0]["recommendation_factors"]["missing_capabilities"], [])
+        self.assertTrue(recommendations[0]["recommendation_factors"]["locality_match"])
+        self.assertIn("locality match: subscription", recommendations[0]["reasons"])
         metered = next(item for item in recommendations if item["profile_id"] == "opencode_acp_glm52")
         self.assertFalse(metered["eligible"])
         self.assertIn("metered API profile requires explicit opt-in", metered["caveats"])
+        self.assertEqual(metered["recommendation_factors"]["locality_actual"], "subscription")
 
     def test_registry_treats_explicit_metered_profile_id_as_opt_in(self) -> None:
         config = load_config(Path("/tmp/orbital-config-does-not-exist"))
@@ -166,6 +250,44 @@ class OrbitalCoreTests(unittest.TestCase):
         profile, _ = registry.select(ROOT, profile_id="opencode_acp_glm52", task=TaskInput("t", "o"))
         self.assertEqual(profile.id, "opencode_acp_glm52")
 
+    def test_preflight_exposes_support_classification_and_capability_gaps(self) -> None:
+        cli = HarnessProfile(
+            id="cli",
+            display_name="CLI",
+            adapter="cli",
+            runtime_family="generic",
+            command=[sys.executable],
+            auth_mode="local_subscription",
+            cost_posture="subscription_preferred",
+            capabilities=["dialogue"],
+            permission_behavior="none",
+        )
+        cli.classification.task_tags = ["docs"]
+        cli.classification.locality = "subscription"
+        cli.support.tier = "cli_fallback"
+        service = TaskRunService(
+            HarnessRegistry(HarnessConfig(default_profile="cli", profiles=[cli])),
+            RunStore(ROOT / ".tmp-test-preflight" / ".orbital"),
+        )
+        try:
+            preflight = service.preflight(
+                ROOT,
+                TaskInput(
+                    title="Needs permission",
+                    objective="Need permission to edit.",
+                    checks=["python3 -m pytest -q"],
+                ),
+                profile_id="cli",
+            )
+
+            self.assertTrue(preflight["passed"])
+            self.assertEqual(preflight["support"]["tier"], "cli_fallback")
+            self.assertEqual(preflight["classification"]["task_tags"], ["docs"])
+            self.assertFalse(preflight["normalized_capabilities"]["supports_permissions"])
+            self.assertIn("permissions", preflight["capability_gaps"])
+        finally:
+            _remove_tree(ROOT / ".tmp-test-preflight")
+
     def test_stable_error_response_maps_permission_restart_error(self) -> None:
         payload = error_response(ValueError("permission_not_resolvable_after_restart"))
 
@@ -173,6 +295,15 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "permission_not_resolvable_after_restart")
         self.assertFalse(payload["error"]["retryable"])
         self.assertIn("Start a new run", payload["error"]["user_action"])
+
+    def test_stable_error_response_maps_permission_adapter_errors(self) -> None:
+        mismatch = error_response(ValueError("unknown adapter request for permission perm-1: 99"))
+        failed = error_response(ValueError("adapter_permission_resolution_failed: perm-1: stale request"))
+
+        self.assertEqual(mismatch["error"]["code"], "unknown_adapter_request")
+        self.assertEqual(failed["error"]["code"], "adapter_permission_resolution_failed")
+        self.assertIn("adapter_request_id", mismatch["error"]["user_action"])
+        self.assertIn("decision was recorded", failed["error"]["user_action"])
 
     def test_run_status_normalizer_maps_legacy_and_unknown_values(self) -> None:
         self.assertEqual(normalize_run_status("starting"), "launching")
@@ -377,6 +508,82 @@ class OrbitalCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ambiguous approve options"):
             choose_option(request, "approve")
 
+    def test_resolve_permission_rejects_adapter_request_mismatch(self) -> None:
+        tmp = ROOT / ".tmp-test-permission-mismatch"
+        try:
+            service, run, permission = _service_with_pending_permission(tmp)
+
+            with self.assertRaisesRegex(ValueError, "unknown adapter request"):
+                _run_async(
+                    service.resolve_permission(
+                        run.run_id,
+                        permission.permission_id,
+                        "approve",
+                        option_id="allow",
+                        adapter_request_id="wrong-request",
+                    )
+                )
+
+            stored = store_permissions(service, run.run_id)
+            self.assertEqual([item["status"] for item in stored], ["pending"])
+        finally:
+            _remove_tree(tmp)
+
+    def test_resolve_permission_records_decision_metadata_and_adapter_outcome(self) -> None:
+        tmp = ROOT / ".tmp-test-permission-audit"
+        try:
+            service, run, permission = _service_with_pending_permission(tmp)
+
+            resolution = _run_async(
+                service.resolve_permission(
+                    run.run_id,
+                    permission.permission_id,
+                    "approve",
+                    option_id="allow",
+                    rationale="unit approval",
+                    adapter_request_id=permission.adapter_request_id,
+                    deciding_primary="codex-primary",
+                )
+            )
+
+            resolved = resolution["permission"]
+            self.assertEqual(resolved["decision"], "approve")
+            self.assertEqual(resolved["deciding_primary"], "codex-primary")
+            self.assertEqual(resolved["adapter_resolution_status"], "accepted")
+            self.assertIsNotNone(resolved["resolved_at"])
+            stored = store_permissions(service, run.run_id)
+            self.assertEqual([item["status"] for item in stored], ["pending", "approved"])
+            self.assertEqual(stored[1]["adapter_resolution_status"], "accepted")
+            self.assertEqual(stored[1]["decision"], "approve")
+        finally:
+            _remove_tree(tmp)
+
+    def test_resolve_permission_records_adapter_resolution_failure(self) -> None:
+        tmp = ROOT / ".tmp-test-permission-failure"
+        try:
+            service, run, permission = _service_with_pending_permission(tmp, fail_adapter=True)
+
+            with self.assertRaisesRegex(ValueError, "adapter_permission_resolution_failed"):
+                _run_async(
+                    service.resolve_permission(
+                        run.run_id,
+                        permission.permission_id,
+                        "approve",
+                        option_id="allow",
+                        rationale="unit approval",
+                        deciding_primary="codex-primary",
+                    )
+                )
+
+            stored = store_permissions(service, run.run_id)
+            self.assertEqual([item["status"] for item in stored], ["pending", "pending"])
+            self.assertEqual(stored[1]["adapter_resolution_status"], "failed")
+            self.assertEqual(stored[1]["decision"], "approve")
+            self.assertEqual(stored[1]["deciding_primary"], "codex-primary")
+            self.assertIn("stale adapter request", stored[1]["adapter_result"]["error"])
+        finally:
+            _remove_tree(tmp)
+
     def test_permission_normalization_extracts_paths_and_raw_reference(self) -> None:
         request = normalize_permission(
             "task-run-normalize",
@@ -386,9 +593,11 @@ class OrbitalCoreTests(unittest.TestCase):
                     "summary": "Edit files",
                     "risk": "write",
                     "paths": ["docs/TODO.md"],
+                    "resources": ["file:docs/TODO.md"],
                     "toolCall": {
+                        "title": "edit docs",
                         "locations": [{"path": "src/orbital_mcp/server.py"}],
-                        "rawInput": {"cwd": str(ROOT), "changes": {"pyproject.toml": "..."}},
+                        "rawInput": {"cwd": str(ROOT), "command": ["python3", "-m", "pytest"], "changes": {"pyproject.toml": "..."}},
                     },
                     "options": [{"id": "yes", "label": "Yes", "kind": "allow"}],
                 }
@@ -397,6 +606,10 @@ class OrbitalCoreTests(unittest.TestCase):
 
         self.assertEqual(request.permission_id, "perm-task-run-normalize-42")
         self.assertEqual(request.risk, "write")
+        self.assertEqual(request.command_or_action, "edit docs")
+        self.assertEqual(request.action, "edit docs")
+        self.assertEqual(request.command, "python3 -m pytest")
+        self.assertEqual(request.resources, ["file:docs/TODO.md"])
         self.assertEqual(request.options[0].option_id, "yes")
         self.assertEqual(
             request.paths,
@@ -496,6 +709,77 @@ class OrbitalCoreTests(unittest.TestCase):
         finally:
             _remove_tree(tmp)
 
+    def test_stop_task_run_warns_when_stop_safe_liveness_check_is_stale(self) -> None:
+        tmp = ROOT / ".tmp-test-stale-liveness-stop"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-stale-liveness-stop", tmp)
+        try:
+            store.create_run(run)
+            store.save_session(
+                DelegationSession(
+                    schema_version=1,
+                    session_id="delegation-session-stale-liveness-stop",
+                    status="active",
+                    objective="Stop stale run",
+                    workdir=str(tmp),
+                    run_ids=[run.run_id],
+                    last_liveness_checks={
+                        run.run_id: {
+                            "timestamp": "2000-01-01T00:00:00Z",
+                            "verdict": "stop_safe",
+                            "recommendation": {"action": "stop", "stop_allowed": True},
+                            "stop_safe": True,
+                        }
+                    },
+                )
+            )
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+            service._runs[run.run_id] = run
+
+            _run_async(service.stop_task_run(run.run_id))
+
+            session = store.load_session("delegation-session-stale-liveness-stop")
+            warnings = session["session_warnings"]
+            self.assertEqual(warnings[0]["code"], "stop_without_liveness_check")
+            self.assertIn("last_verdict=stop_safe", warnings[0]["message"])
+            self.assertIn("last_action=stop", warnings[0]["message"])
+        finally:
+            _remove_tree(tmp)
+
+    def test_stop_task_run_does_not_warn_after_recent_stop_safe_liveness_check(self) -> None:
+        tmp = ROOT / ".tmp-test-recent-liveness-stop"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-recent-liveness-stop", tmp)
+        try:
+            store.create_run(run)
+            store.save_session(
+                DelegationSession(
+                    schema_version=1,
+                    session_id="delegation-session-recent-liveness-stop",
+                    status="active",
+                    objective="Stop recent run",
+                    workdir=str(tmp),
+                    run_ids=[run.run_id],
+                    last_liveness_checks={
+                        run.run_id: {
+                            "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                            "verdict": "stop_safe",
+                            "recommendation": {"action": "stop", "stop_allowed": True},
+                            "stop_safe": True,
+                        }
+                    },
+                )
+            )
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+            service._runs[run.run_id] = run
+
+            _run_async(service.stop_task_run(run.run_id))
+
+            session = store.load_session("delegation-session-recent-liveness-stop")
+            self.assertEqual(session["session_warnings"], [])
+        finally:
+            _remove_tree(tmp)
+
     def test_fake_acp_run_captures_tools_checks_usage_model_and_stderr(self) -> None:
         tmp = ROOT / ".tmp-test-fake-acp-run"
         try:
@@ -519,7 +803,9 @@ class OrbitalCoreTests(unittest.TestCase):
             self.assertEqual(summary["status"], "completed")
             self.assertEqual(summary["evidence"]["checks"][0]["status"], "passed")
             self.assertGreaterEqual(summary["evidence"]["tool_calls"]["completed"], 2)
-            self.assertEqual(summary["tokens"]["total"], 135)
+            self.assertFalse(summary["tokens"]["known"])
+            self.assertEqual(summary["token_sources"]["adapter_payloads"]["total"], 135)
+            self.assertFalse(summary["token_sources"]["external_agent_logs"]["known"])
             self.assertIn("fake-acp-model", summary["model"]["models"])
             self.assertEqual(summary["file_attribution"][0]["path"], "fake_output.txt")
             stderr_tail = service.get_run_log_tail(summary["run_id"], "stderr.log", max_bytes=4096)
@@ -527,6 +813,133 @@ class OrbitalCoreTests(unittest.TestCase):
             dialogue = service.get_dialogue(summary["run_id"], include_raw=False, include_agent_chunks=False)
             self.assertFalse(any(event.get("kind") == "agent_message_chunk" for event in dialogue["events"]))
             self.assertTrue(all("raw" not in event for event in dialogue["events"]))
+        finally:
+            _remove_tree(tmp)
+
+    def test_run_summary_uses_external_agent_logs_as_canonical_tokens(self) -> None:
+        tmp = ROOT / ".tmp-test-canonical-agent-log-tokens"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-canonical-tokens", tmp, status="completed")
+        home = tmp / "agent-home"
+        log_dir = home / ".codex" / "sessions" / "2026" / "07" / "03"
+        try:
+            tmp.mkdir(exist_ok=True)
+            log_dir.mkdir(parents=True)
+            store.create_run(run)
+            store.append_dialogue(
+                new_event(run.run_id, "agent_message_chunk", "codex", "done", raw={"usage": {"total_tokens": 999}})
+            )
+            dialogue_path = store.run_dir(run.run_id) / "dialogue.jsonl"
+            event = json.loads(dialogue_path.read_text(encoding="utf-8").splitlines()[0])
+            event_timestamp = str(event["timestamp"])
+            dialogue_path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+            (
+                log_dir / "rollout-2026-07-03T10-00-00-00000000-0000-0000-0000-000000000001.jsonl"
+            ).write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "timestamp": event_timestamp,
+                                "type": "session_meta",
+                                "payload": {"cwd": str(tmp), "model": "gpt-test"},
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "timestamp": event_timestamp,
+                                "type": "event_msg",
+                                "payload": {
+                                    "info": {
+                                        "total_token_usage": {
+                                            "input_tokens": 200,
+                                            "cached_input_tokens": 50,
+                                            "output_tokens": 30,
+                                            "total_tokens": 230,
+                                        }
+                                    }
+                                },
+                            }
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+
+            with patch.dict("os.environ", {"ORBITAL_AGENT_LOG_HOME": str(home)}):
+                summary = service.get_run_summary(run.run_id)
+
+            self.assertTrue(summary["tokens"]["known"])
+            self.assertEqual(summary["tokens"]["source"], "external_agent_logs")
+            self.assertEqual(summary["tokens"]["total"], 230)
+            self.assertEqual(summary["token_sources"]["adapter_payloads"]["total"], 999)
+            self.assertEqual(summary["token_sources"]["external_agent_logs"]["records"][0]["agent"], "codex")
+        finally:
+            _remove_tree(tmp)
+
+    def test_run_summary_keeps_tokens_unknown_when_agent_log_correlation_is_ambiguous(self) -> None:
+        tmp = ROOT / ".tmp-test-ambiguous-agent-log-tokens"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-ambiguous-tokens", tmp, status="completed")
+        home = tmp / "agent-home"
+        log_dir = home / ".codex" / "sessions" / "2026" / "07" / "03"
+        try:
+            tmp.mkdir(exist_ok=True)
+            log_dir.mkdir(parents=True)
+            store.create_run(run)
+            store.append_dialogue(
+                new_event(run.run_id, "agent_message_chunk", "codex", "done", raw={"usage": {"total_tokens": 999}})
+            )
+            dialogue_path = store.run_dir(run.run_id) / "dialogue.jsonl"
+            event = json.loads(dialogue_path.read_text(encoding="utf-8").splitlines()[0])
+            event_timestamp = str(event["timestamp"])
+            dialogue_path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+            for idx, total in enumerate([230, 240], start=1):
+                (log_dir / f"rollout-2026-07-03T10-00-0{idx}-00000000-0000-0000-0000-00000000000{idx}.jsonl").write_text(
+                    "\n".join(
+                        [
+                            json.dumps(
+                                {
+                                    "timestamp": event_timestamp,
+                                    "type": "session_meta",
+                                    "payload": {"cwd": str(tmp), "model": "gpt-test"},
+                                }
+                            ),
+                            json.dumps(
+                                {
+                                    "timestamp": event_timestamp,
+                                    "type": "event_msg",
+                                    "payload": {
+                                        "info": {
+                                            "total_token_usage": {
+                                                "input_tokens": total,
+                                                "cached_input_tokens": 0,
+                                                "output_tokens": 0,
+                                                "total_tokens": total,
+                                            }
+                                        }
+                                    },
+                                }
+                            ),
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+
+            with patch.dict("os.environ", {"ORBITAL_AGENT_LOG_HOME": str(home)}):
+                summary = service.get_run_summary(run.run_id)
+
+            self.assertFalse(summary["tokens"]["known"])
+            self.assertEqual(summary["tokens"]["source"], "not_available")
+            self.assertEqual(summary["token_sources"]["adapter_payloads"]["total"], 999)
+            external = summary["token_sources"]["external_agent_logs"]
+            self.assertFalse(external["known"])
+            self.assertEqual(len(external["records"]), 2)
+            self.assertIn("2 correlated local agent-log records", external["caveats"][0])
         finally:
             _remove_tree(tmp)
 
@@ -627,6 +1040,45 @@ def _run(run_id: str, workdir: Path, status: str = "running") -> TaskRun:
         session=SessionMetadata(),
         counts=RunCounts(),
     )
+
+
+def _service_with_pending_permission(
+    tmp: Path,
+    fail_adapter: bool = False,
+) -> tuple[TaskRunService, TaskRun, PermissionRequest]:
+    store = RunStore(tmp / ".orbital")
+    run = _run("task-run-permission-live", tmp, status="waiting_for_permission")
+    store.create_run(run)
+    service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+    permission = PermissionRequest(
+        permission_id="perm-task-run-permission-live-77",
+        run_id=run.run_id,
+        adapter_request_id="77",
+        summary="Edit file",
+        options=[
+            PermissionOption(option_id="allow", label="Allow", kind="allow"),
+            PermissionOption(option_id="deny", label="Deny", kind="deny"),
+        ],
+    )
+    store.append_permission(permission)
+    service._runs[run.run_id] = run
+    service._permissions[permission.permission_id] = permission
+    service._controllers[run.run_id] = _PermissionController(fail=fail_adapter)
+    return service, run, permission
+
+
+def store_permissions(service: TaskRunService, run_id: str) -> list[dict]:
+    return service.store.read_permissions(run_id)
+
+
+class _PermissionController:
+    def __init__(self, fail: bool = False):
+        self.fail = fail
+
+    async def resolve_permission(self, request_id: str, option_id: str) -> dict:
+        if self.fail:
+            raise RuntimeError("stale adapter request")
+        return {"outcome": {"outcome": "selected", "optionId": option_id}}
 
 
 def _fake_acp_service(tmp: Path) -> TaskRunService:

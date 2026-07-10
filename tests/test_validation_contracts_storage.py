@@ -109,6 +109,46 @@ class ContractAndStorageValidationTests(unittest.TestCase):
         finally:
             remove_tree(tmp)
 
+    def test_recovered_pending_permission_is_visible_stale_and_not_resolvable(self) -> None:
+        tmp = ROOT / ".tmp-test-contract-stale-permission"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-contract-stale-permission", tmp, status="waiting_for_permission")
+        try:
+            store.create_run(run)
+            store.append_permission(
+                PermissionRequest(
+                    permission_id="perm-task-run-contract-stale-permission-1",
+                    run_id=run.run_id,
+                    adapter_request_id="1",
+                    summary="Edit fake_output.txt",
+                )
+            )
+
+            recovered = store.recover_interrupted_runs()
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+            diagnostics = store.storage_diagnostics(run.run_id)
+            summary = service.get_run_summary(run.run_id)
+
+            self.assertEqual(recovered[0]["status"], "interrupted")
+            stale = [issue for issue in diagnostics["issues"] if issue["code"] == "stale_pending_permission"]
+            self.assertEqual(stale[0]["permission_id"], "perm-task-run-contract-stale-permission-1")
+            self.assertEqual(stale[0]["recoverability"], "not_resolvable_without_adapter_reattachment")
+            self.assertEqual(summary["status"], "interrupted")
+            self.assertEqual(
+                summary["pending_permission_requests"][0]["permission_id"],
+                "perm-task-run-contract-stale-permission-1",
+            )
+            with self.assertRaisesRegex(ValueError, "permission_not_resolvable_after_restart"):
+                _run_async(
+                    service.resolve_permission(
+                        run.run_id,
+                        "perm-task-run-contract-stale-permission-1",
+                        "approve",
+                    )
+                )
+        finally:
+            remove_tree(tmp)
+
 
 def _run(run_id: str, workdir: Path, status: str = "running") -> TaskRun:
     return TaskRun(
@@ -128,6 +168,12 @@ def _run(run_id: str, workdir: Path, status: str = "running") -> TaskRun:
         session=SessionMetadata(),
         counts=RunCounts(),
     )
+
+
+def _run_async(coro):
+    import asyncio
+
+    return asyncio.run(coro)
 
 
 if __name__ == "__main__":
