@@ -18,7 +18,7 @@ Implemented and currently validated:
 - Manual local ACP smoke currently covers Codex and OpenCode as separate scripts under `tests/manual`; OpenCode smoke evidence recorded OpenCode `1.17.13` and ACP `protocolVersion=1`.
 - Canonical token telemetry is implemented for the practical V1 targets: Codex rollout JSONL under `~/.codex/sessions/**/rollout-*.jsonl` and OpenCode SQLite under `~/.local/share/opencode/opencode.db`. Manual Codex and OpenCode token probes use isolated token workspaces and require exactly one correlated external agent-log record.
 - Initial evidence-gap controls are implemented in primary-safe run outputs: `evidence_status`, `evidence_score`, grouped `evidence_groups`, stable requested-check warning names, and `worker_claim_without_evidence` for prose-only completions.
-- Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fixture replay, fake ACP conformance checks, scrubbed Codex/OpenCode transcript excerpts, capability matrix assertions, and deterministic missing-feature reporting.
+- Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fixture replay, fake ACP conformance checks, fake failure fixtures for malformed/unknown/stderr/stop/partial-result behavior, scrubbed Codex/OpenCode transcript excerpts, capability matrix assertions, and deterministic missing-feature reporting.
 - No real local Claude ACP subscription path has been verified. Claude ACP planning remains API-backed through the Claude Agent SDK until proven otherwise.
 - Smoke-verified real profiles remain `experimental_acp`; no real profile should be promoted to `known_good_acp` until adapter conformance fixtures and smoke evidence both pass.
 
@@ -78,7 +78,7 @@ Problem:
 Workplan:
 
 - [ ] Define a reusable ACP conformance fixture schema that captures initialize, session creation, prompt submission, streamed text, tool calls, permission requests, permission resolution, stderr, stop/cancel, final result, model metadata, and usage payloads.
-- [ ] Broaden the current fixture-driven fake ACP conformance tests to cover stop/cancel, stderr-only failure, malformed payloads, and all permission result variants.
+- [ ] Broaden the current fixture-driven fake ACP conformance tests to cover the remaining permission result variants beyond the existing approval round trip, stop/cancel, stderr-only failure, malformed payload, unknown event, and partial-result fixtures.
 - [ ] Broaden the current legacy Codex ACP fixture beyond the scrubbed smoke excerpt to include stop/cancel and failure-mode transcript coverage.
 - [ ] Broaden the current official Codex ACP fixture beyond the scrubbed permission-capability-gap excerpt to include stop/cancel and failure-mode transcript coverage.
 - [ ] Broaden the current OpenCode ACP fixture beyond the scrubbed smoke excerpt to include stop/cancel and failure-mode transcript coverage.

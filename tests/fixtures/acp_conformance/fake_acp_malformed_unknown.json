@@ -1,0 +1,24 @@
+{
+  "fixture_id": "fake_acp_malformed_unknown",
+  "profile_id": "fake_acp",
+  "runtime_family": "fake",
+  "source": "deterministic malformed and unknown ACP payload fixture",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"fake-session\",\"update\":{\"sessionUpdate\":\"mystery_update\",\"payload\":{\"value\":1}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"agent/teleport\",\"params\":{\"sessionId\":\"fake-session\"}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"status\":\"passed\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize"],
+    "server_methods": ["session/update", "agent/teleport"],
+    "unknown_methods": ["agent/teleport"],
+    "unknown_session_updates": ["mystery_update"],
+    "malformed_line_numbers": [5],
+    "result_statuses": ["passed"],
+    "normalized_features": ["terminal_result"],
+    "permission_behavior": "not_applicable"
+  }
+}

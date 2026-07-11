@@ -14,9 +14,13 @@ class AcpConformanceExpectation:
     normalized_features: list[str] = field(default_factory=list)
     result_statuses: list[str] = field(default_factory=list)
     permission_option_ids: list[str] = field(default_factory=list)
+    unknown_methods: list[str] = field(default_factory=list)
+    unknown_session_updates: list[str] = field(default_factory=list)
+    malformed_line_numbers: list[int] = field(default_factory=list)
     permission_behavior: str | None = None
     require_usage_payload: bool = False
     require_model_metadata: bool = False
+    require_stderr: bool = False
 
 
 @dataclass
@@ -50,15 +54,21 @@ def evaluate_acp_conformance(transcript: str, expectation: AcpConformanceExpecta
         "normalized_features": _missing(expectation.normalized_features, observed["normalized_features"]),
         "result_statuses": _missing(expectation.result_statuses, observed["result_statuses"]),
         "permission_option_ids": _missing(expectation.permission_option_ids, observed["permission_option_ids"]),
+        "unknown_methods": _missing(expectation.unknown_methods, observed["unknown_methods"]),
+        "unknown_session_updates": _missing(expectation.unknown_session_updates, observed["unknown_session_updates"]),
+        "malformed_lines": _missing_ints(expectation.malformed_line_numbers, observed["malformed_lines"]),
         "usage_payload": ["usage_payload"] if expectation.require_usage_payload and not observed["usage_payload_count"] else [],
         "model_metadata": ["model_metadata"] if expectation.require_model_metadata and not observed["models"] else [],
+        "stderr": ["stderr"] if expectation.require_stderr and not observed["stderr_lines"] else [],
         "permission_behavior": _missing_permission_behavior(expectation.permission_behavior, observed),
     }
+    unexpected_malformed_lines = _unexpected_ints(expectation.malformed_line_numbers, observed["malformed_lines"])
     return {
         "schema_version": 1,
-        "ok": not any(missing.values()) and not observed["malformed_lines"],
+        "ok": not any(missing.values()) and not unexpected_malformed_lines,
         "observed": observed,
         "missing": missing,
+        "unexpected": {"malformed_lines": unexpected_malformed_lines},
         "capabilities": capability_matrix(observed),
     }
 
@@ -90,9 +100,13 @@ def load_acp_conformance_fixture(path: Path | str) -> AcpConformanceFixture:
             normalized_features=_string_list(expectation.get("normalized_features")),
             result_statuses=_string_list(expectation.get("result_statuses")),
             permission_option_ids=_string_list(expectation.get("permission_option_ids")),
+            unknown_methods=_string_list(expectation.get("unknown_methods")),
+            unknown_session_updates=_string_list(expectation.get("unknown_session_updates")),
+            malformed_line_numbers=_int_list(expectation.get("malformed_line_numbers")),
             permission_behavior=permission_behavior,
             require_usage_payload=bool(expectation.get("require_usage_payload", False)),
             require_model_metadata=bool(expectation.get("require_model_metadata", False)),
+            require_stderr=bool(expectation.get("require_stderr", False)),
         ),
     )
 
@@ -117,6 +131,8 @@ def capability_matrix(observed: dict[str, Any]) -> dict[str, bool]:
         "permission_round_trip": bool(observed.get("permission_option_ids")),
         "stop_or_cancel": "stop_or_cancel" in features,
         "stderr": "stderr" in features,
+        "unknown_payloads": bool(observed.get("unknown_methods") or observed.get("unknown_session_updates")),
+        "malformed_payloads": bool(observed.get("malformed_lines")),
         "model_metadata": bool(observed.get("models")),
         "adapter_usage_payload": bool(observed.get("usage_payload_count")),
         "terminal_result": "terminal_result" in features,
@@ -126,6 +142,9 @@ def capability_matrix(observed: dict[str, Any]) -> dict[str, bool]:
 def parse_acp_transcript(transcript: str) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for line_number, line in enumerate(transcript.splitlines(), start=1):
+        if line.startswith("! "):
+            messages.append({"direction": "!", "line_number": line_number, "stderr": True, "text": line[2:]})
+            continue
         if not line.startswith(("> ", "< ")):
             continue
         try:
@@ -155,11 +174,18 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
         "models": [],
         "usage_payload_count": 0,
         "malformed_lines": [],
+        "stderr_lines": [],
+        "unknown_methods": [],
+        "unknown_session_updates": [],
         "message_count": len(messages),
     }
     for item in messages:
         if item.get("malformed"):
             observed["malformed_lines"].append(item["line_number"])
+            continue
+        if item.get("stderr"):
+            observed["stderr_lines"].append(item["line_number"])
+            _append_unique(observed["normalized_features"], "stderr")
             continue
         message = item.get("message") if isinstance(item.get("message"), dict) else {}
         direction = item.get("direction")
@@ -168,6 +194,8 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
             _append_unique(observed["client_methods"], str(method))
         elif direction == "<" and method:
             _append_unique(observed["server_methods"], str(method))
+        if method and str(method) not in _KNOWN_METHODS:
+            _append_unique(observed["unknown_methods"], str(method))
         if str(method) in {"session/cancel", "session/stop"}:
             _append_unique(observed["normalized_features"], "stop_or_cancel")
         if str(method) in {"requestPermission", "session/requestPermission", "session.requestPermission", "session/request_permission", "permission/request"}:
@@ -190,6 +218,8 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
         session_update = update.get("sessionUpdate")
         if isinstance(session_update, str):
             _append_unique(observed["session_updates"], session_update)
+            if session_update not in _KNOWN_SESSION_UPDATES:
+                _append_unique(observed["unknown_session_updates"], session_update)
             if session_update == "agent_message_chunk":
                 _append_unique(observed["normalized_features"], "dialogue")
             if session_update in {"tool_call", "tool_call_update"}:
@@ -225,6 +255,14 @@ def _missing(expected: list[str], observed: list[str]) -> list[str]:
     return [item for item in expected if item not in observed]
 
 
+def _missing_ints(expected: list[int], observed: list[int]) -> list[int]:
+    return [item for item in expected if item not in observed]
+
+
+def _unexpected_ints(expected: list[int], observed: list[int]) -> list[int]:
+    return [item for item in observed if item not in expected]
+
+
 def _append_unique(values: list[str], value: str) -> None:
     if value not in values:
         values.append(value)
@@ -248,3 +286,39 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
+
+
+def _int_list(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    values: list[int] = []
+    for item in value:
+        try:
+            values.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+_KNOWN_METHODS = {
+    "initialize",
+    "session/new",
+    "session/prompt",
+    "session/set_model",
+    "session/cancel",
+    "session/stop",
+    "requestPermission",
+    "session/requestPermission",
+    "session.requestPermission",
+    "session/request_permission",
+    "permission/request",
+}
+
+_KNOWN_SESSION_UPDATES = {
+    "agent_message_chunk",
+    "available_commands_update",
+    "session_info_update",
+    "tool_call",
+    "tool_call_update",
+    "usage_update",
+}

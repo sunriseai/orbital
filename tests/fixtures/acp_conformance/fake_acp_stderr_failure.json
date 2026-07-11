@@ -1,0 +1,20 @@
+{
+  "fixture_id": "fake_acp_stderr_failure",
+  "profile_id": "fake_acp",
+  "runtime_family": "fake",
+  "source": "deterministic stderr-only failure fixture",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"fake-session\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "! AuthRequired: fake harness could not authenticate",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"status\":\"failed\",\"text\":\"AuthRequired\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/prompt"],
+    "result_statuses": ["failed"],
+    "normalized_features": ["stderr", "terminal_result"],
+    "permission_behavior": "not_applicable",
+    "require_stderr": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "fixture_id": "fake_acp_stop_cancel",
+  "profile_id": "fake_acp",
+  "runtime_family": "fake",
+  "source": "deterministic cooperative cancel fixture",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"fake-session\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"session/cancel\",\"params\":{\"sessionId\":\"fake-session\"}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"status\":\"cancelled\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/cancel"],
+    "normalized_features": ["stop_or_cancel", "terminal_result"],
+    "result_statuses": ["cancelled"],
+    "permission_behavior": "not_applicable"
+  }
+}

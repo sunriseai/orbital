@@ -1,0 +1,16 @@
+{
+  "fixture_id": "fake_acp_partial_result",
+  "profile_id": "fake_acp",
+  "runtime_family": "fake",
+  "source": "deterministic partial terminal result fixture",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"fake-session\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/prompt"],
+    "permission_behavior": "not_applicable"
+  }
+}

@@ -205,7 +205,7 @@ Current local smoke evidence:
 
 Current conformance fixture evidence:
 
-- `fake_acp`: fixture replay covers core ACP flow and a complete permission approval round trip.
+- `fake_acp`: fixture replay covers core ACP flow, complete permission approval round trip, malformed JSON-RPC, unknown event shapes, stderr-only failure, cooperative cancel, and partial terminal result behavior.
 - `codex_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, dialogue, tools, usage updates, and terminal result; permissions are currently represented as a capability gap.
 - `codex_acp_official`: scrubbed fixture replay covers the app-server adapter's permission-capability-gap run, tool/guardian events, model metadata, adapter usage payloads, and terminal result.
 - `opencode_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, edit tool events, dialogue, adapter usage payloads, and terminal result; permissions are currently represented as a capability gap.
