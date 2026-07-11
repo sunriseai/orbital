@@ -1,0 +1,28 @@
+{
+  "fixture_id": "fake_acp_core",
+  "profile_id": "fake_acp",
+  "runtime_family": "fake",
+  "source": "deterministic fake ACP transcript shape",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"fake-session\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"fake-session\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"fake-session\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"Working\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"fake-session\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-1\",\"status\":\"in_progress\",\"kind\":\"edit\",\"title\":\"write fake_output.txt\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"fake-session\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-1\",\"status\":\"completed\",\"rawOutput\":{\"exit_code\":0}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"fake-session\",\"update\":{\"sessionUpdate\":\"usage_update\",\"usage\":{\"input_tokens\":100,\"output_tokens\":25,\"cache_read_input_tokens\":10,\"total_tokens\":135},\"model\":\"fake-acp-model\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"status\":\"passed\",\"text\":\"done\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update"],
+    "session_updates": ["agent_message_chunk", "tool_call", "tool_call_update", "usage_update"],
+    "normalized_features": ["dialogue", "tools", "terminal_result"],
+    "result_statuses": ["passed"],
+    "permission_behavior": "not_applicable",
+    "require_usage_payload": true,
+    "require_model_metadata": true
+  }
+}

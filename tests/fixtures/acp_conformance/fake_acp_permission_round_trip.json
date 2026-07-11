@@ -1,0 +1,26 @@
+{
+  "fixture_id": "fake_acp_permission_round_trip",
+  "profile_id": "fake_acp",
+  "runtime_family": "fake",
+  "source": "deterministic fake ACP permission transcript shape",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"fake-session\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"fake-session\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":77,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"fake-session\",\"action\":\"edit\",\"paths\":[\"fake_output.txt\"],\"resources\":[\"file:fake_output.txt\"],\"options\":[{\"id\":\"allow\",\"label\":\"Allow\",\"kind\":\"allow\"},{\"id\":\"deny\",\"label\":\"Deny\",\"kind\":\"deny\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":77,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"allow\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"fake-session\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"Permission approved\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"status\":\"passed\",\"text\":\"done\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/request_permission", "session/update"],
+    "session_updates": ["agent_message_chunk"],
+    "normalized_features": ["dialogue", "permissions", "terminal_result"],
+    "result_statuses": ["passed"],
+    "permission_option_ids": ["allow"],
+    "permission_behavior": "round_trip"
+  }
+}

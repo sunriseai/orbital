@@ -97,7 +97,7 @@ Exit criteria:
 
 - Each supported ACP harness can pass a smoke run.
 - Manual local ACP smoke currently covers legacy Codex ACP and OpenCode; OpenCode smoke records OpenCode `1.17.13` and ACP `protocolVersion=1`.
-- Official Codex ACP app-server validation is represented by the side-by-side `codex_acp_official` profile and manual wrappers, but it remains experimental until smoke evidence and conformance fixtures are captured.
+- Official Codex ACP app-server validation is represented by the side-by-side `codex_acp_official` profile, manual wrappers, and a scrubbed conformance fixture, but it remains experimental until the fixture matrix covers all claimed capabilities.
 - Manual local ACP permission smoke reports either a full approval round trip or a clearly labeled runtime permission capability gap.
 - Claude Agent SDK ACP exists as disabled API-backed profile metadata, but remains unverified until it passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.

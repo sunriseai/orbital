@@ -203,6 +203,13 @@ Current local smoke evidence:
 - `claude_code_cli_local`: local/subscription Claude path is CLI fallback through `claude`, not ACP.
 - `claude_agent_acp_api`: disabled API-backed ACP profile via `claude-agent-acp`; explicit setup is required and it is not smoke-verified yet.
 
+Current conformance fixture evidence:
+
+- `fake_acp`: fixture replay covers core ACP flow and a complete permission approval round trip.
+- `codex_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, dialogue, tools, usage updates, and terminal result; permissions are currently represented as a capability gap.
+- `codex_acp_official`: scrubbed fixture replay covers the app-server adapter's permission-capability-gap run, tool/guardian events, model metadata, adapter usage payloads, and terminal result.
+- `opencode_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, edit tool events, dialogue, adapter usage payloads, and terminal result; permissions are currently represented as a capability gap.
+
 Smoke evidence is necessary but not sufficient for `known_good_acp`. A profile remains `experimental_acp` until adapter conformance fixtures cover initialization, prompt submission, event normalization, permissions, stop/cancel behavior, stderr, and telemetry expectations.
 
 Claude support should be modeled as two separate profile families:

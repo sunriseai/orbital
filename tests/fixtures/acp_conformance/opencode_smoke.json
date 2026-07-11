@@ -1,0 +1,29 @@
+{
+  "fixture_id": "opencode_smoke",
+  "profile_id": "opencode_acp_local",
+  "runtime_family": "opencode",
+  "source": "scrubbed excerpt derived from local_opencode_acp_smoke_20260704T120116Z.log",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"configOptions\":[{\"id\":\"model\",\"currentValue\":\"opencode/glm-5.2\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[{\"name\":\"review\"}]}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-1\",\"title\":\"write\",\"kind\":\"edit\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-1\",\"status\":\"in_progress\",\"kind\":\"edit\",\"title\":\"write\",\"locations\":[{\"path\":\"<WORKDIR>/TOKEN_SMOKE.md\"}]}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-1\",\"status\":\"completed\",\"title\":\"TOKEN_SMOKE.md\",\"rawOutput\":{\"output\":\"Wrote file successfully.\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"msg-1\",\"content\":{\"type\":\"text\",\"text\":\"Created TOKEN_SMOKE.md\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"usage_update\",\"used\":7889,\"size\":1000000,\"cost\":{\"amount\":0.01349,\"currency\":\"USD\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":89,\"outputTokens\":18,\"totalTokens\":7907,\"cachedReadTokens\":7800},\"_meta\":{}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update"],
+    "session_updates": ["available_commands_update", "tool_call", "tool_call_update", "agent_message_chunk", "usage_update"],
+    "normalized_features": ["dialogue", "tools", "terminal_result"],
+    "result_statuses": ["end_turn"],
+    "permission_behavior": "capability_gap",
+    "require_usage_payload": true
+  }
+}

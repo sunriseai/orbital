@@ -63,6 +63,8 @@ Run manual smoke wrappers when you want a timestamped log under `tests/manual/lo
 
 The local permission smoke wrappers separately probe whether a real Codex/OpenCode ACP runtime emits a permission request that Orbital can expose and resolve. A `pass` result means the full primary-mediated approval path was exercised. A `permission_capability_gap` result means the secondary harness completed the task without emitting an ACP permission request, so Orbital had no real permission event to mediate; this is a runtime capability/configuration gap, not evidence that Orbital dropped a request.
 
+ACP conformance fixtures under `tests/fixtures/acp_conformance/` replay scrubbed protocol excerpts for fake ACP, legacy Codex ACP, official Codex ACP, and OpenCode ACP. These fixtures are the support-tier gate: real profiles stay `experimental_acp` until fixture coverage and manual smoke evidence prove their claimed capabilities.
+
 ### Token Telemetry
 
 Orbital treats token telemetry as exact-only. Canonical run totals come from local agent logs that can be correlated to the run by isolated workspace path and run time window:

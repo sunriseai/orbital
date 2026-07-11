@@ -18,14 +18,14 @@ Implemented and currently validated:
 - Manual local ACP smoke currently covers Codex and OpenCode as separate scripts under `tests/manual`; OpenCode smoke evidence recorded OpenCode `1.17.13` and ACP `protocolVersion=1`.
 - Canonical token telemetry is implemented for the practical V1 targets: Codex rollout JSONL under `~/.codex/sessions/**/rollout-*.jsonl` and OpenCode SQLite under `~/.local/share/opencode/opencode.db`. Manual Codex and OpenCode token probes use isolated token workspaces and require exactly one correlated external agent-log record.
 - Initial evidence-gap controls are implemented in primary-safe run outputs: `evidence_status`, `evidence_score`, grouped `evidence_groups`, stable requested-check warning names, and `worker_claim_without_evidence` for prose-only completions.
-- Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fake ACP conformance checks, and deterministic missing-feature reporting.
+- Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fixture replay, fake ACP conformance checks, scrubbed Codex/OpenCode transcript excerpts, capability matrix assertions, and deterministic missing-feature reporting.
 - No real local Claude ACP subscription path has been verified. Claude ACP planning remains API-backed through the Claude Agent SDK until proven otherwise.
 - Smoke-verified real profiles remain `experimental_acp`; no real profile should be promoted to `known_good_acp` until adapter conformance fixtures and smoke evidence both pass.
 
 Current engineering focus:
 
-- Turn the fake ACP behavior into an explicit adapter conformance fixture matrix that can be reused when evaluating Codex, OpenCode, Pi, or Claude Agent SDK ACP.
-- Apply that matrix first to smoke-verified local Codex ACP, official Codex ACP, and OpenCode ACP, because real ACP conformance is the next support-tier gate.
+- Broaden the explicit adapter conformance fixture matrix for Codex and OpenCode before expanding it to Pi or Claude Agent SDK ACP.
+- Apply the matrix first to smoke-verified local Codex ACP, official Codex ACP, and OpenCode ACP, because fuller real ACP conformance is the next support-tier gate.
 - Keep `../ngitd-core` integration, richer SDLC/git attribution, and containerized sandbox enforcement as later layers unless an adapter-conformance task exposes a narrow prerequisite.
 - Keep the TODO below as the remaining implementation, hardening, and promotion backlog. Items that are already partially implemented should be treated as "finish, broaden, or lock down" work, not as absence of any code.
 
@@ -78,12 +78,12 @@ Problem:
 Workplan:
 
 - [ ] Define a reusable ACP conformance fixture schema that captures initialize, session creation, prompt submission, streamed text, tool calls, permission requests, permission resolution, stderr, stop/cancel, final result, model metadata, and usage payloads.
-- [ ] Convert the fake ACP behavior into fixture-driven conformance tests instead of one-off behavior tests.
-- [ ] Capture deterministic legacy Codex ACP transcript fixtures from the reviewed manual smoke logs, scrub local paths where needed, and replay them through the adapter normalizer.
-- [ ] Capture deterministic official Codex ACP transcript fixtures from `codex_acp_official` smoke logs once the app-server adapter path is locally verified.
-- [ ] Capture deterministic OpenCode ACP transcript fixtures from the reviewed manual smoke logs, scrub local paths where needed, and replay them through the adapter normalizer.
+- [ ] Broaden the current fixture-driven fake ACP conformance tests to cover stop/cancel, stderr-only failure, malformed payloads, and all permission result variants.
+- [ ] Broaden the current legacy Codex ACP fixture beyond the scrubbed smoke excerpt to include stop/cancel and failure-mode transcript coverage.
+- [ ] Broaden the current official Codex ACP fixture beyond the scrubbed permission-capability-gap excerpt to include stop/cancel and failure-mode transcript coverage.
+- [ ] Broaden the current OpenCode ACP fixture beyond the scrubbed smoke excerpt to include stop/cancel and failure-mode transcript coverage.
 - [ ] Add fixture cases for malformed JSON-RPC, unknown event shapes, missing IDs, unknown stop reasons, partial result payloads, and stderr-only failures.
-- [ ] Add a conformance report that lists normalized features observed for each runtime family: dialogue, tools, permissions, stop, stderr, model metadata, adapter usage payloads, and local-log token telemetry.
+- [ ] Extend the current conformance report so it lists normalized features observed for each runtime family: dialogue, tools, permissions, stop, stderr, model metadata, adapter usage payloads, and local-log token telemetry.
 - [ ] Gate `known_good_acp` promotion on fixture pass, manual smoke pass, documented capability gaps, and deterministic regression coverage.
 - [ ] Keep raw transcript references available in debug artifacts whenever a normalizer drops, downgrades, or ignores an unknown payload.
 

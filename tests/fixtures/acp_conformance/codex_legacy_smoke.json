@@ -1,0 +1,27 @@
+{
+  "fixture_id": "codex_legacy_smoke",
+  "profile_id": "codex_acp_local",
+  "runtime_family": "codex",
+  "source": "scrubbed excerpt derived from local_codex_acp_smoke manual logs",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<CODEX_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"call-1\",\"status\":\"in_progress\",\"kind\":\"execute\",\"title\":\"create smoke file\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"call-1\",\"status\":\"completed\",\"rawOutput\":{\"exit_code\":0}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"Created ORBITAL_SMOKE.md\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"usage_update\",\"used\":21495,\"size\":258400}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update"],
+    "session_updates": ["tool_call", "tool_call_update", "agent_message_chunk", "usage_update"],
+    "normalized_features": ["dialogue", "tools", "terminal_result"],
+    "result_statuses": ["end_turn"],
+    "permission_behavior": "capability_gap",
+    "require_usage_payload": true
+  }
+}

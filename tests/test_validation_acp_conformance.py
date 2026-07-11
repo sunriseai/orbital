@@ -16,10 +16,104 @@ from orbital_test_helpers import (
     wait_for_terminal_summary,
 )
 
-from orbital_mcp.acp_conformance import AcpConformanceExpectation, evaluate_acp_conformance  # noqa: E402
+from orbital_mcp.acp_conformance import (  # noqa: E402
+    AcpConformanceExpectation,
+    evaluate_acp_conformance,
+    evaluate_acp_conformance_fixture,
+    load_acp_conformance_fixture,
+)
+from orbital_mcp.config import load_config  # noqa: E402
+
+
+FIXTURE_DIR = ROOT / "tests" / "fixtures" / "acp_conformance"
+REAL_PROFILE_FIXTURES = [
+    "codex_legacy_smoke.json",
+    "codex_official_permission_gap.json",
+    "opencode_smoke.json",
+]
 
 
 class AcpAdapterConformanceFixtureTests(unittest.TestCase):
+    def test_fixture_loader_rejects_incomplete_fixture(self) -> None:
+        tmp = ROOT / ".tmp-test-acp-bad-fixture.json"
+        try:
+            tmp.write_text(json.dumps({"fixture_id": "bad"}), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "missing required fields"):
+                load_acp_conformance_fixture(tmp)
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    def test_fixture_replay_covers_fake_and_real_runtime_profiles(self) -> None:
+        expected_capabilities = {
+            "fake_acp_core": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": True,
+            },
+            "fake_acp_permission_round_trip": {
+                "dialogue": True,
+                "tools": False,
+                "permissions": True,
+                "permission_round_trip": True,
+                "adapter_usage_payload": False,
+                "model_metadata": False,
+            },
+            "codex_legacy_smoke": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+            },
+            "codex_official_permission_gap": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": True,
+            },
+            "opencode_smoke": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+            },
+        }
+
+        for path in sorted(FIXTURE_DIR.glob("*.json")):
+            with self.subTest(fixture=path.name):
+                report = evaluate_acp_conformance_fixture(path)
+                self.assertTrue(report["ok"], report)
+                expected = expected_capabilities[report["fixture_id"]]
+                for capability, value in expected.items():
+                    self.assertEqual(report["capabilities"][capability], value, report)
+
+    def test_real_profiles_remain_experimental_until_fixture_promotion_gate_changes(self) -> None:
+        profiles = {profile.id: profile for profile in load_config(ROOT).profiles}
+        fixture_profiles = {
+            evaluate_acp_conformance_fixture(FIXTURE_DIR / fixture)["profile_id"]
+            for fixture in REAL_PROFILE_FIXTURES
+        }
+
+        self.assertEqual(fixture_profiles, {"codex_acp_local", "codex_acp_official", "opencode_acp_local"})
+        for profile_id in fixture_profiles:
+            self.assertEqual(profiles[profile_id].support.tier, "experimental_acp")
+
+        known_good_real_profiles = [
+            profile.id
+            for profile in profiles.values()
+            if profile.support.tier == "known_good_acp" and profile.id in fixture_profiles
+        ]
+        self.assertEqual(known_good_real_profiles, [])
+
     def test_conformance_report_lists_missing_expected_features(self) -> None:
         transcript = '> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
 
@@ -29,6 +123,7 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 client_methods=["initialize", "session/new"],
                 server_methods=["session/update"],
                 session_updates=["agent_message_chunk"],
+                normalized_features=["dialogue"],
                 require_usage_payload=True,
             ),
         )
@@ -37,6 +132,7 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
         self.assertEqual(report["missing"]["client_methods"], ["session/new"])
         self.assertEqual(report["missing"]["server_methods"], ["session/update"])
         self.assertEqual(report["missing"]["session_updates"], ["agent_message_chunk"])
+        self.assertEqual(report["missing"]["normalized_features"], ["dialogue"])
         self.assertEqual(report["missing"]["usage_payload"], ["usage_payload"])
 
     def test_fake_acp_fixture_covers_core_protocol_and_primary_safe_filtering(self) -> None:
