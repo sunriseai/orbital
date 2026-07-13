@@ -75,13 +75,14 @@ Goal: make ACP conformance the main trust gate for supported secondary coding ag
 
 Primary risks addressed: adapter drift, permission ambiguity, profile mismatch, and evidence gaps caused by runtime-specific protocol behavior.
 
-Strategic decision: Phase 3 should treat diagnostic evidence as the product control for nondeterministic harness behavior. Orbital cannot make primary and secondary models fully deterministic, but it can preserve raw artifacts, normalize a diagnostic timeline, separate observations from inferences, and make warnings, capability gaps, and next-inspection pointers deterministic.
+Strategic decision: Phase 3 should treat diagnostic evidence as the product control for nondeterministic harness behavior. Orbital cannot make primary and secondary models fully deterministic, but it can preserve raw artifacts, normalize a diagnostic timeline, separate observations from inferences, and make warnings, capability gaps, and next-inspection pointers deterministic. This is an artifact contract for future Prism coordination, not direct `ngitd-core` integration.
 
 Deliverables:
 
 - Normalize ACP event shapes across OpenCode, Pi, Codex, and API-backed Claude Agent SDK where available.
 - Capture text updates, tool events, permission requests, stop behavior, model selection, and usage payloads.
 - Capture a diagnostic timeline for each run covering preflight, launch, ACP initialize, session creation, prompt submission, tool activity, permission decisions, policy checks, file/check evidence, telemetry correlation, warnings, capability gaps, and terminal result.
+- Add run-summary explainability fields that separate observed facts, inferred state, unknowns, and next artifact reads.
 - Preserve complete permission approval round trips: request context, adapter option IDs, primary decision, adapter response, and post-decision run evidence.
 - Preserve bounded raw artifact references for protocol payloads, permission requests, adapter responses, stderr, token-source evidence, and final results while keeping ordinary summaries primary-safe.
 - Distinguish observed facts, inferred state, unknowns, and recommended next diagnostic reads in summaries and smoke logs.
@@ -99,7 +100,7 @@ Deliverables:
 - Treat OpenCode permission configuration as the first practical harness-specific enforcement lever: use `OPENCODE_CONFIG_CONTENT` at the profile level to force `bash`/`edit` asks, preserve OpenCode's structured request context, and keep `once` as the normal approval outcome unless the primary explicitly wants session-scoped `always` behavior.
 - Validate the intended mixed-harness shape first: Codex primary supervising OpenCode secondary through Orbital MCP to ACP, with OpenCode ask-config permission mediation. Add Claude primary to this target matrix after its setup path is verified.
 - Treat same-runtime primary/secondary testing, such as Codex controlling Codex ACP, as validation coverage rather than the target product workflow. The target workflow is a high-capability primary harness delegating bounded work to smaller, cheaper, local, or specialized secondary harnesses.
-- Keep richer Git/SDLC attribution and stronger sandbox execution out of this phase unless a conformance fixture requires a narrow supporting change.
+- Keep richer Git/SDLC attribution, direct `ngitd-core` integration, and stronger sandbox execution out of this phase unless a conformance fixture requires a narrow supporting change.
 
 Exit criteria:
 
@@ -111,6 +112,7 @@ Exit criteria:
 - Claude Agent SDK ACP exists as disabled API-backed profile metadata, but remains unverified until it passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.
 - Diagnostic output can explain what Orbital observed, what it inferred, what remains unknown, and which artifact should be inspected next.
+- Status digests expose compact diagnostic counts without raw events.
 - Primary harnesses do not need runtime-specific ACP knowledge.
 - No runtime family is labeled `known_good_acp` without conformance fixture coverage.
 
@@ -125,6 +127,7 @@ Deliverables:
 - Add repair-ticket creation from server-observed gaps.
 - Keep primary-only guidance separate from worker-safe constraints.
 - Produce reports with timing, profile mix, evidence, attribution, and exact token accounting when known.
+- Keep accepted/rejected attempt language scoped to run-control assessments; durable repo-change dispositions and lineage remain `ngitd-core`/Prism responsibilities.
 - Document `ticket` as a bounded local task record if the term remains in API names.
 - Preserve first-draft session warnings for profile mismatch, path-scope drift, missing review evidence, unreviewed attempts, unsatisfied handoff items, unattributed files, and stopping without liveness.
 - Preserve deterministic next-action recommendations for ordinary session control flow.
@@ -187,14 +190,15 @@ Exit criteria:
 - Raw transcript inspection is only needed for ambiguous or debug cases.
 - Recovery diagnostics are clear enough that primary harnesses can choose repair, retry, or manual inspection.
 
-## Later: Richer Git And Execution Controls
+## Later: Prism, Richer Git, And Execution Controls
 
 These are valuable, but they should build on a trusted delegation layer rather than define the initial product wedge.
 
 Possible later work:
 
-- Integration planning for `../ngitd-core` as the long-term extended Git data source.
-- Rich dirty-workdir history, branch/commit metadata, and cross-run file attribution.
+- Prism coordination of Orbital run artifacts with `ngitd-core` repo memory.
+- Rich dirty-workdir history, branch/commit metadata, captured-change records, terminal dispositions, and cross-run file lineage through `ngitd-core`.
+- A stable artifact handoff contract so Prism can attach Orbital run summaries, permission records, checks, and diagnostics as `ngitd-core` evidence or annotations.
 - Containerized or sandboxed execution modes for stronger filesystem, network, and process enforcement.
 - Higher-level management or prompt-policy overlays for teams that want stricter approval workflows.
 

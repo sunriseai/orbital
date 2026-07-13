@@ -15,6 +15,7 @@ from orbital_mcp.config import load_config
 from orbital_mcp.dialogue import new_event  # noqa: E402
 from orbital_mcp.errors import error_response  # noqa: E402
 from orbital_mcp.events import POLICY_VIOLATION  # noqa: E402
+from orbital_mcp.guidance import primary_guidance  # noqa: E402
 from orbital_mcp.liveness import analyze_run_liveness  # noqa: E402
 from orbital_mcp.models import (  # noqa: E402
     HarnessConfig,
@@ -680,6 +681,20 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertNotIn("profile-selection", prompt.lower())
         self.assertNotIn("scoring rubric", prompt.lower())
         self.assertNotIn("handoff report", prompt.lower())
+
+    def test_primary_guidance_scopes_reviews_to_runs_not_repo_lineage(self) -> None:
+        guidance = primary_guidance("codex")
+        rules = "\n".join(guidance["review_rules"])
+        boundaries = guidance["role_boundaries"]
+
+        self.assertIn("Accepted delegated runs", rules)
+        self.assertIn("run-control assessment", rules)
+        self.assertIn("not a repo-change disposition", rules)
+        self.assertIn("ngitd-core", rules)
+        self.assertIn("Prism", rules)
+        self.assertIn("external_repo_memory", boundaries)
+        self.assertIn("attachable run artifacts", "\n".join(boundaries["orbital_mcp"]))
+        self.assertIn("lineage", "\n".join(boundaries["external_repo_memory"]))
 
     def test_command_policy_is_reviewable_by_default_and_blockable_by_config(self) -> None:
         review = evaluate_command_policy("python3 -m pip install pytest")

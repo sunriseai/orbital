@@ -14,7 +14,7 @@ PRIMARY_WORKFLOW_STEPS = [
     "Delegate one ticket at a time and poll get_run_status_digest rather than raw dialogue by default.",
     "Use get_run_policy_verdict and get_next_recommended_action before inventing retry prompts.",
     "Call get_run_liveness before stopping or declaring a quiet run stalled.",
-    "Record an attempt review after every terminal run.",
+    "Record an operational attempt review after every terminal run.",
     "Use create_repair_ticket_from_run for routine server-classified gaps; do not lower the product contract.",
     "Finish the session only after final verification or a concrete blocker.",
 ]
@@ -40,23 +40,28 @@ def primary_guidance(host_harness: str | None = None) -> dict[str, Any]:
         "host_harness": host,
         "summary": (
             "Use Orbital MCP as a local delegation control plane: the primary harness plans, "
-            "delegates, reviews evidence, manages permissions, requests repairs, and reports outcomes."
+            "delegates, reviews run evidence, manages permissions, requests repairs, and reports outcomes."
         ),
         "role_boundaries": {
             "primary_harness": [
                 "Create requirements and tickets.",
                 "Resolve permissions conservatively.",
                 "Inspect changed files and verification output.",
-                "Record reviews and decide whether a run counts.",
+                "Record operational reviews and decide whether a delegated run counts.",
             ],
             "orbital_mcp": [
                 "Launch configured workers.",
-                "Persist runs, sessions, transcripts, permissions, snapshots, warnings, liveness, and reports.",
+                "Persist runs, sessions, transcripts, permissions, fallback snapshots, warnings, liveness, and reports.",
                 "Normalize adapter-specific events into a stable MCP surface.",
+                "Expose attachable run artifacts for external repo-memory systems.",
             ],
             "secondary_harness": [
                 "Execute bounded coding tickets in the selected runtime.",
                 "Emit dialogue, tool, and permission events for Orbital to capture.",
+            ],
+            "external_repo_memory": [
+                "Prism should coordinate when Orbital run artifacts become repo-memory evidence or annotations.",
+                "ngitd-core should record repo snapshots, captured changes, terminal dispositions, and lineage.",
             ],
         },
         "workflow_steps": PRIMARY_WORKFLOW_STEPS,
@@ -64,9 +69,11 @@ def primary_guidance(host_harness: str | None = None) -> dict[str, Any]:
             "Worker prose is context, not proof.",
             "Raw dialogue and transcripts are debug/audit material; prefer digests, verdicts, warnings, and log refs.",
             "Passing checks are necessary but not sufficient.",
-            "Accepted runs must satisfy the targeted requirements with implementation and test evidence.",
+            "Accepted delegated runs must satisfy the targeted requirements with implementation and test evidence.",
+            "Orbital accept/reject language is a run-control assessment, not a repo-change disposition or ngitd-core lineage record.",
             "User-facing artifacts must be verified through their public interface when feasible.",
             "Treat policy violations, missing checks, no-op passes, and out-of-scope changes as repair or rejection signals.",
+            "Repo acceptance or rejection should be recorded by a repo-memory layer such as ngitd-core, coordinated later by Prism.",
         ],
         "recommended_tools": [
             "start_delegation_session",

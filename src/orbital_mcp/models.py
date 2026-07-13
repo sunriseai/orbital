@@ -319,6 +319,37 @@ class RunEvidence:
 
 
 @dataclass
+class DiagnosticTimelineItem:
+    phase: str
+    label: str
+    source: str
+    timestamp: str | None = None
+    event_id: str | None = None
+    permission_id: str | None = None
+    check_command: str | None = None
+    warning_code: str | None = None
+    artifact_ref: str | None = None
+    status: str | None = None
+
+
+@dataclass
+class DiagnosticEntry:
+    code: str
+    message: str
+    source: str
+    artifact_ref: str | None = None
+    event_id: str | None = None
+
+
+@dataclass
+class DiagnosticExplainability:
+    observed: list[DiagnosticEntry] = field(default_factory=list)
+    inferred: list[DiagnosticEntry] = field(default_factory=list)
+    unknown: list[DiagnosticEntry] = field(default_factory=list)
+    diagnostic_next_steps: list[DiagnosticEntry] = field(default_factory=list)
+
+
+@dataclass
 class RunSummary:
     schema_version: int
     run_id: str
@@ -344,6 +375,8 @@ class RunSummary:
     model: ModelTelemetry
     warnings: list[str]
     warning_details: list[RunWarning]
+    diagnostic_timeline: list[DiagnosticTimelineItem] = field(default_factory=list)
+    diagnostic_explainability: DiagnosticExplainability = field(default_factory=DiagnosticExplainability)
     failure_classification: list[str] = field(default_factory=list)
     log_refs: LogRefs | None = None
 
@@ -368,6 +401,10 @@ class RunStatusDigest:
     policy_verdict: str
     policy_reason_codes: list[str]
     recommended_action: str
+    diagnostic_timeline_count: int = 0
+    diagnostic_unknown_count: int = 0
+    diagnostic_next_step_count: int = 0
+    diagnostic_top_next_step: DiagnosticEntry | None = None
     raw_events_omitted: bool = True
     log_refs: LogRefs | None = None
 

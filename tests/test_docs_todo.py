@@ -87,6 +87,45 @@ class DocsTodoTests(unittest.TestCase):
         self.assertIn("SDLC-specific issue, branch, PR, CI, release, sprint, epic, owner, or team policy layers", self.todo)
         self.assertIn("Later: SDLC Layer", self.roadmap)
 
+    def test_specs_and_todo_preserve_prism_ngitd_boundary(self) -> None:
+        for phrase in [
+            "Prism / Orbital / ngitd Boundary",
+            "artifact contract",
+            "run-control assessment",
+            "ngitd-core",
+            "repo snapshots",
+            "terminal dispositions",
+            "lineage",
+            "no `.ngit/` writes",
+        ]:
+            self.assertIn(phrase, self.product + self.tech + self.roadmap + self.todo + self.readme)
+        self.assertIn("artifact_contract_only", self.todo)
+        self.assertIn("not direct `ngitd-core` integration", self.roadmap)
+
+    def test_specs_and_todo_preserve_diagnostic_evidence_contract(self) -> None:
+        for phrase in [
+            "diagnostic_timeline",
+            "diagnostic_explainability",
+            "observed",
+            "inferred",
+            "unknown",
+            "diagnostic_next_steps",
+            "top next step",
+        ]:
+            self.assertIn(phrase, self.readme + self.product + self.tech + self.roadmap + self.todo)
+
+    def test_readme_explains_orbital_observation_model(self) -> None:
+        for phrase in [
+            "## Observation Model",
+            "only records what it can see through its own control path",
+            "not a general observer",
+            "MCP calls made to Orbital",
+            "ACP or CLI events from secondary harness processes that Orbital launches",
+            "does not see arbitrary model activity outside that loop",
+            "should not fabricate or directly write diagnostic facts",
+        ]:
+            self.assertIn(phrase, self.readme)
+
     def test_specs_and_todo_agree_on_profile_classification_schema(self) -> None:
         for phrase in [
             "classification.task_tags",

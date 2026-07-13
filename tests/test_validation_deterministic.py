@@ -4,9 +4,11 @@ import json
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from orbital_test_helpers import ROOT, remove_tree
 
+from orbital_mcp.agent_log_telemetry import AgentLogTokenRecord, AgentLogTokenTelemetry  # noqa: E402
 from orbital_mcp.dialogue import new_event  # noqa: E402
 from orbital_mcp.events import AGENT_MESSAGE_CHUNK, TOOL_CALL_COMPLETED  # noqa: E402
 from orbital_mcp.liveness import LivenessThresholds, analyze_run_liveness  # noqa: E402
@@ -74,6 +76,10 @@ class DeterministicValidationTests(unittest.TestCase):
             self.assertEqual(digest["schema_version"], 1)
             self.assertEqual(digest["status"], "completed")
             self.assertNotIn("events", digest)
+            self.assertGreaterEqual(digest["diagnostic_timeline_count"], 2)
+            self.assertGreaterEqual(digest["diagnostic_unknown_count"], 1)
+            self.assertGreaterEqual(digest["diagnostic_next_step_count"], 1)
+            self.assertIn("code", digest["diagnostic_top_next_step"])
             self.assertTrue(digest["raw_events_omitted"])
         finally:
             remove_tree(tmp)
@@ -98,6 +104,12 @@ class DeterministicValidationTests(unittest.TestCase):
             self.assertIn("no_completed_tool_calls", warning_codes)
             self.assertIn("worker_claim_without_evidence", warning_codes)
             self.assertIn("worker_claim_without_evidence", summary["failure_classification"])
+            self.assertIn("diagnostic_timeline", summary)
+            self.assertIn("diagnostic_explainability", summary)
+            unknown_codes = {item["code"] for item in summary["diagnostic_explainability"]["unknown"]}
+            next_step_codes = {item["code"] for item in summary["diagnostic_explainability"]["diagnostic_next_steps"]}
+            self.assertIn("worker_claim_unverified", unknown_codes)
+            self.assertIn("inspect_worker_claim_without_evidence", next_step_codes)
             self.assertEqual(digest["evidence_status"], "repair_needed")
             self.assertEqual(verdict["policy_verdict"], "needs_repair")
             self.assertEqual(verdict["repair_seed"]["title"], f"Repair {run.run_id}")
@@ -120,6 +132,42 @@ class DeterministicValidationTests(unittest.TestCase):
             self.assertNotIn("requested_check_missing", warning_codes)
             self.assertIn("missing_requested_check", summary["failure_classification"])
             self.assertEqual(summary["evidence"]["checks"][0]["status"], "missing")
+            timeline = summary["diagnostic_timeline"]
+            self.assertTrue(any(item["phase"] == "check" and item["status"] == "missing" for item in timeline))
+            self.assertTrue(
+                any(
+                    item["code"] == "requested_check_missing"
+                    for item in summary["diagnostic_explainability"]["unknown"]
+                )
+            )
+        finally:
+            remove_tree(tmp)
+
+    def test_telemetry_ambiguity_is_explainable_unknown_with_next_step(self) -> None:
+        tmp = ROOT / ".tmp-test-validation-telemetry-ambiguity"
+        store = RunStore(tmp / ".orbital")
+        run = _run("task-run-validation-telemetry-ambiguity", tmp, status="completed")
+        try:
+            store.create_run(run)
+            service = TaskRunService(HarnessRegistry(load_config(Path("/tmp/orbital-config-does-not-exist"))), store)
+            ambiguous = AgentLogTokenTelemetry(
+                known=False,
+                source="test",
+                records=[
+                    AgentLogTokenRecord(agent="codex", session_id="a", source="a", attribution="workspace_time"),
+                    AgentLogTokenRecord(agent="codex", session_id="b", source="b", attribution="workspace_time"),
+                ],
+                caveats=["multiple correlated local agent-log records matched the run window"],
+            )
+
+            with patch("orbital_mcp.service.scan_external_agent_token_telemetry", return_value=ambiguous):
+                summary = service.get_run_summary(run.run_id)
+
+            unknown_codes = {item["code"] for item in summary["diagnostic_explainability"]["unknown"]}
+            next_step_codes = {item["code"] for item in summary["diagnostic_explainability"]["diagnostic_next_steps"]}
+            self.assertIn("token_telemetry_unknown", unknown_codes)
+            self.assertIn("inspect_token_sources", next_step_codes)
+            self.assertIn("isolate_token_workspace", next_step_codes)
         finally:
             remove_tree(tmp)
 

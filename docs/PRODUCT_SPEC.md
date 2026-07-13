@@ -234,6 +234,8 @@ The primary harness should receive:
 - requested check evidence
 - normalized tool evidence
 - evidence status, evidence score, and grouped evidence warnings
+- diagnostic timeline with primary-safe lifecycle, tool, permission, check, telemetry, warning, capability-gap, and terminal anchors
+- diagnostic explainability grouped as observed facts, inferred state, unknowns, and next artifact reads
 - warnings and failure classifications
 - final worker response
 - bounded dialogue when explicitly requested
@@ -241,6 +243,8 @@ The primary harness should receive:
 - exact model and token telemetry when available
 
 Worker prose is context, not proof.
+
+Diagnostic evidence is a run-level aid for the primary harness. It explains what Orbital observed, what Orbital inferred, what remains unknown, and which `.orbital/` artifact should be inspected next. It is not repo-change lineage; Prism can later attach these artifacts to `ngitd-core` evidence or annotations.
 
 ### 6. Repair Loop
 
@@ -295,6 +299,18 @@ The session model should preserve the first draft's useful operating loop:
 - Complete approval channel. Permission requests and responses must carry enough structured context for a primary harness to supervise secondary agents without constant manual user approval.
 - Evidence over vibes. Orbital should record observable facts, not infer success from natural language.
 - Worker prompts stay bounded. Primary-only guidance must not leak into secondary task prompts.
+
+## Prism / Orbital / ngitd Boundary
+
+Orbital should keep a clean boundary with Prism and `ngitd-core`:
+
+- Prism is the future coordinating app. It decides when a delegated run, repo capture, human review, and product workflow should be connected.
+- Orbital owns agent-run truth: harness orchestration, ACP/CLI lifecycle, permissions, run diagnostics, liveness, telemetry correlation, primary-safe summaries, and attachable run artifacts.
+- `ngitd-core` owns repo-change truth: repo snapshots, captured changes, durable evidence artifacts, annotations, terminal dispositions, and lineage.
+
+Orbital accept/reject language is a run-control assessment only. `accept_candidate`, `needs_repair`, and `reject` describe whether a delegated run appears usable, repairable, or unsuitable for the current task. They are not repo-change dispositions and must not imply `ngitd-core` lineage.
+
+Orbital should not write `.ngit/`, call `ngit`, or become the durable repo evidence store in the core MCP product. Its integration posture is an artifact contract: produce bounded, structured, inspectable run artifacts that Prism can later attach to `ngitd-core` evidence or annotations.
 
 ## Open Questions
 

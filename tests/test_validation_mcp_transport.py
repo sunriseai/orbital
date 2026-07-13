@@ -25,6 +25,11 @@ class McpTransportValidationTests(unittest.TestCase):
             self.assertIn("get_server_info", result["tool_names"])
             self.assertIn("run_task_and_wait", result["tool_names"])
             self.assertEqual(result["server_info"]["name"], "orbital-mcp")
+            boundaries = result["server_info"]["system_boundaries"]
+            self.assertEqual(boundaries["integration_posture"], "artifact_contract_only")
+            self.assertIn("Prism", boundaries["external_coordinator"])
+            self.assertIn("ngitd-core", boundaries["repo_memory_owner"])
+            self.assertIn("repo-change capture", boundaries["orbital_does_not_own"])
             self.assertTrue(result["profile_check"]["ok"])
             self.assertEqual(result["profile_check"]["profile_id"], "fake_acp")
             self.assertEqual(result["run_summary"]["status"], "completed")

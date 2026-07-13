@@ -35,6 +35,9 @@ from .events import (
 from .liveness import analyze_run_liveness
 from .models import (
     CheckEvidence,
+    DiagnosticEntry,
+    DiagnosticExplainability,
+    DiagnosticTimelineItem,
     DelegationRunAssessment,
     DelegationSession,
     DelegationRequirement,
@@ -219,6 +222,7 @@ class TaskRunService:
     def get_run_status_digest(self, run_id: str) -> dict[str, Any]:
         summary = self._run_summary(run_id, max_events=0)
         verdict = self._run_policy_verdict(summary)
+        next_steps = summary.diagnostic_explainability.diagnostic_next_steps
         return to_jsonable(
             RunStatusDigest(
                 schema_version=1,
@@ -239,6 +243,10 @@ class TaskRunService:
                 policy_verdict=verdict.policy_verdict,
                 policy_reason_codes=verdict.reason_codes,
                 recommended_action=verdict.recommended_action,
+                diagnostic_timeline_count=len(summary.diagnostic_timeline),
+                diagnostic_unknown_count=len(summary.diagnostic_explainability.unknown),
+                diagnostic_next_step_count=len(next_steps),
+                diagnostic_top_next_step=next_steps[0] if next_steps else None,
                 log_refs=summary.log_refs,
             )
         )
@@ -1085,9 +1093,40 @@ class TaskRunService:
         evidence_groups = _evidence_groups(warning_details)
         evidence_status = _evidence_status(evidence_groups)
         evidence_score = _evidence_score(evidence_groups)
-
         status = normalize_run_status(run.get("status"))
         normalized_run = {**run, "status": status}
+        failure_classification = _failure_classification(
+            run=normalized_run,
+            evidence=evidence,
+            warning_details=warning_details,
+            changed_files=changed_files,
+            changed_since_run_start=changed_since_run_start,
+        )
+        log_refs = _log_refs_from_dict(run.get("log_refs")) or self.store.log_refs(run_id)
+
+        diagnostic_timeline = _diagnostic_timeline(
+            run=normalized_run,
+            events=all_dialogue,
+            permissions=permissions,
+            evidence=evidence,
+            warning_details=warning_details,
+            token_sources=token_sources,
+            log_refs=log_refs,
+        )
+        diagnostic_explainability = _diagnostic_explainability(
+            run=normalized_run,
+            evidence=evidence,
+            evidence_status=evidence_status,
+            evidence_score=evidence_score,
+            warning_details=warning_details,
+            failure_classification=failure_classification,
+            changed_files=changed_files,
+            changed_since_run_start=changed_since_run_start,
+            tokens=canonical_tokens,
+            model=adapter_telemetry.model,
+            token_sources=token_sources,
+            log_refs=log_refs,
+        )
         return RunSummary(
             schema_version=1,
             run_id=run_id,
@@ -1116,14 +1155,10 @@ class TaskRunService:
             model=adapter_telemetry.model,
             warnings=warnings,
             warning_details=warning_details,
-            failure_classification=_failure_classification(
-                run=normalized_run,
-                evidence=evidence,
-                warning_details=warning_details,
-                changed_files=changed_files,
-                changed_since_run_start=changed_since_run_start,
-            ),
-            log_refs=_log_refs_from_dict(run.get("log_refs")),
+            diagnostic_timeline=diagnostic_timeline,
+            diagnostic_explainability=diagnostic_explainability,
+            failure_classification=failure_classification,
+            log_refs=log_refs,
         )
 
     def _run_policy_verdict(
@@ -1614,6 +1649,377 @@ def _latest_check_event(check: str, events: list[dict[str, Any]]) -> tuple[dict[
         if normalized_check and normalized_check in _normalize_check_text(command):
             return event, _tool_exit_code(event)
     return None
+
+
+def _diagnostic_timeline(
+    *,
+    run: dict[str, Any],
+    events: list[dict[str, Any]],
+    permissions: list[dict[str, Any]],
+    evidence: RunEvidence,
+    warning_details: list[RunWarning],
+    token_sources: dict[str, Any],
+    log_refs: LogRefs | None,
+) -> list[DiagnosticTimelineItem]:
+    timeline: list[DiagnosticTimelineItem] = [
+        DiagnosticTimelineItem(
+            phase="launch",
+            label="Run record loaded",
+            source="run",
+            status=str(run.get("status") or "unknown"),
+            artifact_ref=_artifact_ref(log_refs, "run"),
+        )
+    ]
+
+    for event in events:
+        kind = str(event.get("kind") or "unknown")
+        timeline.append(
+            DiagnosticTimelineItem(
+                phase=_diagnostic_phase_for_event(kind),
+                label=_diagnostic_label_for_event(kind),
+                source="dialogue",
+                timestamp=str(event.get("timestamp")) if event.get("timestamp") else None,
+                event_id=str(event.get("event_id")) if event.get("event_id") else None,
+                artifact_ref=_artifact_ref(log_refs, "dialogue"),
+                status=kind,
+            )
+        )
+
+    latest_permissions: dict[str, dict[str, Any]] = {}
+    for permission in permissions:
+        permission_id = str(permission.get("permission_id") or "")
+        if permission_id:
+            latest_permissions[permission_id] = permission
+    for permission_id, permission in latest_permissions.items():
+        timeline.append(
+            DiagnosticTimelineItem(
+                phase="permission",
+                label=f"Permission {permission.get('status', 'unknown')}",
+                source="permissions",
+                permission_id=permission_id,
+                artifact_ref=_artifact_ref(log_refs, "permissions"),
+                status=str(permission.get("status") or "unknown"),
+            )
+        )
+
+    for check in evidence.checks:
+        timeline.append(
+            DiagnosticTimelineItem(
+                phase="check",
+                label=f"Requested check {check.status}",
+                source="summary.evidence.checks",
+                event_id=check.event_id,
+                check_command=check.command,
+                artifact_ref=_artifact_ref(log_refs, "transcript"),
+                status=check.status,
+            )
+        )
+
+    for warning in warning_details:
+        timeline.append(
+            DiagnosticTimelineItem(
+                phase="warning",
+                label=warning.message,
+                source="summary.warning_details",
+                event_id=warning.event_id,
+                warning_code=warning.code,
+                artifact_ref=_artifact_for_warning(log_refs, warning.code),
+                status=warning.severity,
+            )
+        )
+
+    external = token_sources.get("external_agent_logs")
+    known = bool(external.get("known")) if isinstance(external, dict) else False
+    timeline.append(
+        DiagnosticTimelineItem(
+            phase="telemetry",
+            label="Canonical token telemetry " + ("correlated" if known else "unknown"),
+            source="token_sources.external_agent_logs",
+            artifact_ref="token_sources.external_agent_logs",
+            status="known" if known else "unknown",
+        )
+    )
+    timeline.append(
+        DiagnosticTimelineItem(
+            phase="terminal",
+            label=f"Run status {run.get('status', 'unknown')}",
+            source="run",
+            artifact_ref=_artifact_ref(log_refs, "final_report"),
+            status=str(run.get("status") or "unknown"),
+        )
+    )
+    return timeline
+
+
+def _diagnostic_explainability(
+    *,
+    run: dict[str, Any],
+    evidence: RunEvidence,
+    evidence_status: str,
+    evidence_score: int,
+    warning_details: list[RunWarning],
+    failure_classification: list[str],
+    changed_files: list[str],
+    changed_since_run_start: list[str],
+    tokens: Any,
+    model: Any,
+    token_sources: dict[str, Any],
+    log_refs: LogRefs | None,
+) -> DiagnosticExplainability:
+    observed = [
+        DiagnosticEntry(
+            code="run_status",
+            message=f"Run status is {run.get('status', 'unknown')}.",
+            source="run",
+            artifact_ref=_artifact_ref(log_refs, "run"),
+        ),
+        DiagnosticEntry(
+            code="changed_files",
+            message=f"Orbital observed {len(changed_files)} changed file(s), {len(changed_since_run_start)} changed since run start.",
+            source="final_report",
+            artifact_ref=_artifact_ref(log_refs, "final_report"),
+        ),
+        DiagnosticEntry(
+            code="tool_calls",
+            message=f"Orbital observed {evidence.tool_calls.completed} completed tool call(s).",
+            source="dialogue",
+            artifact_ref=_artifact_ref(log_refs, "dialogue"),
+        ),
+        DiagnosticEntry(
+            code="permissions",
+            message=f"Orbital observed {evidence.permissions.requested} permission request(s).",
+            source="permissions",
+            artifact_ref=_artifact_ref(log_refs, "permissions"),
+        ),
+    ]
+    if evidence.checks:
+        observed.append(
+            DiagnosticEntry(
+                code="requested_checks",
+                message=f"Orbital tracked {len(evidence.checks)} requested check(s).",
+                source="summary.evidence.checks",
+                artifact_ref=_artifact_ref(log_refs, "transcript"),
+            )
+        )
+
+    inferred = [
+        DiagnosticEntry(
+            code="evidence_status",
+            message=f"Evidence status is {evidence_status} with score {evidence_score}.",
+            source="summary.evidence_groups",
+        )
+    ]
+    if warning_details:
+        inferred.append(
+            DiagnosticEntry(
+                code="warnings",
+                message=f"Orbital inferred {len(warning_details)} warning(s).",
+                source="summary.warning_details",
+            )
+        )
+    if failure_classification:
+        inferred.append(
+            DiagnosticEntry(
+                code="failure_classification",
+                message="Failure classification: " + ", ".join(failure_classification),
+                source="summary.failure_classification",
+            )
+        )
+
+    unknown: list[DiagnosticEntry] = []
+    if not getattr(tokens, "known", False):
+        unknown.append(
+            DiagnosticEntry(
+                code="token_telemetry_unknown",
+                message="Canonical token telemetry was not uniquely correlated.",
+                source="token_sources.external_agent_logs",
+                artifact_ref="token_sources",
+            )
+        )
+    if not getattr(model, "known", False):
+        unknown.append(
+            DiagnosticEntry(
+                code="model_unknown",
+                message="Exact model metadata was not observed.",
+                source="summary.model",
+            )
+        )
+    warning_codes = {warning.code for warning in warning_details}
+    if "missing_requested_check" in warning_codes:
+        unknown.append(
+            DiagnosticEntry(
+                code="requested_check_missing",
+                message="A requested check was not observed in run evidence.",
+                source="summary.warning_details",
+                artifact_ref=_artifact_ref(log_refs, "transcript"),
+            )
+        )
+    if "worker_claim_without_evidence" in warning_codes:
+        unknown.append(
+            DiagnosticEntry(
+                code="worker_claim_unverified",
+                message="Worker completion prose was not backed by edits, completed tool calls, or passed checks.",
+                source="summary.warning_details",
+                artifact_ref=_artifact_ref(log_refs, "dialogue"),
+            )
+        )
+
+    return DiagnosticExplainability(
+        observed=observed,
+        inferred=inferred,
+        unknown=unknown,
+        diagnostic_next_steps=_diagnostic_next_steps(
+            warning_details=warning_details,
+            evidence=evidence,
+            token_sources=token_sources,
+            tokens_known=bool(getattr(tokens, "known", False)),
+            model_known=bool(getattr(model, "known", False)),
+            log_refs=log_refs,
+        ),
+    )
+
+
+def _diagnostic_next_steps(
+    *,
+    warning_details: list[RunWarning],
+    evidence: RunEvidence,
+    token_sources: dict[str, Any],
+    tokens_known: bool,
+    model_known: bool,
+    log_refs: LogRefs | None,
+) -> list[DiagnosticEntry]:
+    steps: list[DiagnosticEntry] = []
+    if evidence.permissions.pending:
+        steps.append(
+            DiagnosticEntry(
+                code="resolve_pending_permission",
+                message="Inspect and resolve pending permission requests.",
+                source="permissions",
+                artifact_ref=_artifact_ref(log_refs, "permissions"),
+            )
+        )
+    if evidence.permissions.denied or evidence.permissions.cancelled:
+        steps.append(
+            DiagnosticEntry(
+                code="inspect_permission_outcome",
+                message="Inspect denied or cancelled permission outcomes before retrying.",
+                source="permissions",
+                artifact_ref=_artifact_ref(log_refs, "permissions"),
+            )
+        )
+
+    for warning in warning_details:
+        steps.append(
+            DiagnosticEntry(
+                code=f"inspect_{warning.code}",
+                message=f"Inspect diagnostic evidence for warning: {warning.code}.",
+                source="summary.warning_details",
+                artifact_ref=_artifact_for_warning(log_refs, warning.code),
+                event_id=warning.event_id,
+            )
+        )
+
+    external = token_sources.get("external_agent_logs")
+    ambiguous = (
+        isinstance(external, dict)
+        and bool(external.get("ambiguity"))
+        or bool(getattr(external, "records", [])) and len(getattr(external, "records", [])) > 1
+    )
+    if not tokens_known:
+        steps.append(
+            DiagnosticEntry(
+                code="inspect_token_sources",
+                message="Inspect token source diagnostics; canonical telemetry is unknown or ambiguous.",
+                source="token_sources.external_agent_logs",
+                artifact_ref="token_sources",
+            )
+        )
+    if ambiguous:
+        steps.append(
+            DiagnosticEntry(
+                code="isolate_token_workspace",
+                message="Rerun with an isolated token workspace to remove telemetry ambiguity.",
+                source="token_sources.external_agent_logs",
+                artifact_ref="token_sources",
+            )
+        )
+    if not model_known:
+        steps.append(
+            DiagnosticEntry(
+                code="inspect_model_metadata",
+                message="Inspect adapter transcript for exact model metadata if model identity matters.",
+                source="summary.model",
+                artifact_ref=_artifact_ref(log_refs, "transcript"),
+            )
+        )
+    return _dedupe_diagnostic_entries(steps)
+
+
+def _diagnostic_phase_for_event(kind: str) -> str:
+    if kind in {TASK_SUBMITTED, STARTUP_PROMPT_SENT, HOST_MESSAGE}:
+        return "prompt"
+    if kind in TOOL_EVENT_KINDS:
+        return "tool"
+    if kind in {PERMISSION_REQUESTED, PERMISSION_APPROVED, PERMISSION_DENIED, PERMISSION_CANCELLED}:
+        return "permission"
+    if kind in WARNING_EVENT_KINDS:
+        return "warning"
+    if kind == RUN_STOPPED:
+        return "terminal"
+    if kind == AGENT_MESSAGE_CHUNK:
+        return "dialogue"
+    return "event"
+
+
+def _diagnostic_label_for_event(kind: str) -> str:
+    labels = {
+        TASK_SUBMITTED: "Task submitted",
+        STARTUP_PROMPT_SENT: "Startup prompt sent",
+        HOST_MESSAGE: "Host message sent",
+        AGENT_MESSAGE_CHUNK: "Agent message observed",
+        PERMISSION_REQUESTED: "Permission requested",
+        PERMISSION_APPROVED: "Permission approved",
+        PERMISSION_DENIED: "Permission denied",
+        PERMISSION_CANCELLED: "Permission cancelled",
+        STDERR: "stderr observed",
+        RUN_ERROR: "Run error observed",
+        RUN_STOPPED: "Run stopped",
+        ACCEPTANCE_CHECK_FAILED: "Acceptance check failed",
+        POLICY_VIOLATION: "Policy violation observed",
+    }
+    if kind in TOOL_EVENT_KINDS:
+        return "Tool event observed"
+    return labels.get(kind, kind)
+
+
+def _artifact_for_warning(log_refs: LogRefs | None, code: str) -> str | None:
+    if code == "malformed_final_report":
+        return _artifact_ref(log_refs, "final_report")
+    if code in {"permission_denied_or_cancelled", "pending_permission"}:
+        return _artifact_ref(log_refs, "permissions")
+    if code in {"stderr", "last_error", RUN_ERROR}:
+        return _artifact_ref(log_refs, "stderr") or _artifact_ref(log_refs, "transcript")
+    if code in {"missing_requested_check", "failed_requested_check", "unknown_requested_check"}:
+        return _artifact_ref(log_refs, "transcript")
+    return "summary.warning_details"
+
+
+def _artifact_ref(log_refs: LogRefs | None, name: str) -> str | None:
+    if log_refs is None:
+        return None
+    return getattr(log_refs, name, None)
+
+
+def _dedupe_diagnostic_entries(entries: list[DiagnosticEntry]) -> list[DiagnosticEntry]:
+    seen: set[tuple[str, str | None]] = set()
+    result: list[DiagnosticEntry] = []
+    for entry in entries:
+        key = (entry.code, entry.artifact_ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(entry)
+    return result
 
 
 def _run_warning_details(

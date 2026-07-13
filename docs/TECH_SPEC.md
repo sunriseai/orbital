@@ -515,6 +515,15 @@ Run summaries should preserve the current sketch's most useful ideas:
 - failure classifications
 - log references
 
+Run evidence is operational evidence for a delegated agent run. It is intentionally not a durable repo-change record, terminal disposition, or lineage entry. Orbital should expose run artifacts that Prism can later attach to `ngitd-core` evidence or annotations, but Orbital should not write `.ngit/`, call `ngit`, or require `ngitd-core` at runtime.
+
+Diagnostic evidence should be derived at summary time from existing `.orbital/` artifacts rather than stored as a second event log in the first implementation. `RunSummary` should include:
+
+- `diagnostic_timeline`: primary-safe entries with phase, label, source, optional event ID, permission ID, check command, warning code, status, and artifact reference.
+- `diagnostic_explainability`: grouped `observed`, `inferred`, `unknown`, and `diagnostic_next_steps` entries.
+
+`RunStatusDigest` should expose only compact diagnostic counts and the top next step. It must not expose raw dialogue or raw adapter payloads. Diagnostic phases should cover at least launch, prompt, dialogue, tool, permission, check, telemetry, warning, terminal, and generic event fallback.
+
 Evidence should include:
 
 - tool call counts by normalized kind
@@ -524,7 +533,7 @@ Evidence should include:
 - permission counts
 - policy violations
 
-File attribution should stay fallback-level in the core delegation layer. Orbital should eventually integrate with `../ngitd-core` for extended Git state capture and richer dirty-workdir management, but that belongs after the ACP delegation layer is trustworthy. Until that integration exists, Orbital should define and test a simpler fallback:
+File attribution should stay fallback-level in the core delegation layer. Orbital may report observed changed paths and attribution confidence for a run, but rich dirty-workdir history, cross-run file lineage, branch/commit context, captured-change records, and accepted/rejected change memory belong to `ngitd-core` and the future Prism coordination layer. Orbital should define and test a simpler fallback:
 
 - require a readable workdir
 - detect whether the workdir is a Git repository
@@ -543,11 +552,11 @@ First-draft attribution caveats to address:
 - Generated artifacts such as caches should be identified separately from source changes.
 - A final dirty file may be changed by a rejected run and still present after an accepted repair; reports should surface that explicitly.
 
-Orbital should mark attribution confidence per file or per summary. Suggested values: `high`, `medium`, `low`, and `unknown`.
+Orbital should mark attribution confidence per file or per summary. Suggested values: `high`, `medium`, `low`, and `unknown`. These confidence values are run diagnostics, not repo lineage.
 
 ## Handoff Data Model
 
-Orbital should model primary-to-secondary handoff generically enough for future SDLC layers, without becoming one.
+Orbital should model primary-to-secondary handoff generically enough for future SDLC layers, without becoming one and without becoming the repo-memory layer.
 
 Entities:
 
@@ -555,10 +564,10 @@ Entities:
 - Handoff item: requirement-like statement, proof needed, status, evidence.
 - Ticket: bounded task objective, item IDs, allowed paths, checks, acceptance hints, rules.
 - Attempt: ticket ID, run ID, attempt number, review decision.
-- Review: primary judgment, rationale, inspected files, verification commands, repair prompt.
+- Review: operational primary judgment for a delegated attempt, rationale, inspected files, verification commands, repair prompt.
 - Report: timing, profile mix, run counts, evidence summary, attribution, token accounting, warnings.
 
-The handoff model should avoid SDLC nouns such as sprint, epic, story, branch policy, release gate, and owner assignment in v1.
+The handoff model should avoid SDLC nouns such as sprint, epic, story, branch policy, release gate, and owner assignment in v1. It should also avoid repo-change disposition semantics: accepted/rejected attempts are run-control assessments, while durable captured-change acceptance, rejection, and lineage belong to `ngitd-core` when Prism coordinates the systems.
 
 ## Storage
 
@@ -584,6 +593,8 @@ Suggested layout after rename:
 ```
 
 File storage keeps the open source product easy to inspect, test, and debug. A database can be considered later if concurrent or hosted use cases require it.
+
+`.orbital/` is operational run/session storage, not a replacement for `.ngit/`. It may contain references to run artifacts, transcripts, permissions, telemetry diagnostics, and summaries. Durable repo-change memory remains external to Orbital; the current posture is an artifact contract for future Prism integration rather than direct `ngitd-core` integration.
 
 Storage invariants:
 

@@ -80,6 +80,20 @@ class ContractAndStorageValidationTests(unittest.TestCase):
             self.assertIn("malformed_json", [issue["code"] for issue in diagnostics["issues"]])
             self.assertEqual(summary["status"], "completed")
             self.assertIn("malformed_final_report", [warning["code"] for warning in summary["warning_details"]])
+            self.assertTrue(
+                any(
+                    item["warning_code"] == "malformed_final_report"
+                    and item["artifact_ref"].endswith("final_report.json")
+                    for item in summary["diagnostic_timeline"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    item["code"] == "inspect_malformed_final_report"
+                    and item["artifact_ref"].endswith("final_report.json")
+                    for item in summary["diagnostic_explainability"]["diagnostic_next_steps"]
+                )
+            )
         finally:
             remove_tree(tmp)
 

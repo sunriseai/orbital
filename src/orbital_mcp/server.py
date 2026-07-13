@@ -49,9 +49,32 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                 "delegation_report": "from session_id or inferred from stored runs by workdir, run_ids, and optional time bounds",
                 "primary_safe_default": "run responses and digests omit raw dialogue by default; use get_debug_dialogue for explicit raw inspection",
                 "failure_classification": "derived from server evidence and normalized across secondary harnesses",
+                "diagnostic_evidence": "run summaries include primary-safe diagnostic_timeline and diagnostic_explainability fields derived from existing .orbital artifacts for future Prism attachment",
                 "token_reporting": "canonical local agent-log telemetry from Codex, Claude, and OpenCode when correlated by workspace and run window; adapter usage is diagnostic only",
                 "model_reporting": "exact adapter model metadata when available; unknown otherwise",
                 "stop_safety": "get_run_liveness recommendation should be checked before stop_task_run for suspected inactivity",
+            },
+            "system_boundaries": {
+                "orbital_owns": [
+                    "harness orchestration",
+                    "ACP and CLI adapter lifecycle",
+                    "permission mediation",
+                    "run diagnostics",
+                    "liveness",
+                    "telemetry correlation",
+                    "primary-safe summaries",
+                    "attachable run artifacts",
+                ],
+                "orbital_does_not_own": [
+                    "repo-change capture",
+                    "durable repo evidence lineage",
+                    "terminal repo-change acceptance or rejection",
+                    "cross-run dirty-workdir history",
+                    "strategic product workflow coordination",
+                ],
+                "external_coordinator": "Prism coordinates Orbital run artifacts with repo-memory systems.",
+                "repo_memory_owner": "ngitd-core owns repo snapshots, captured changes, durable evidence artifacts, annotations, terminal dispositions, and lineage.",
+                "integration_posture": "artifact_contract_only",
             },
             "auth_policy": {
                 "local_subscription_profiles_scrub_api_key_env": [

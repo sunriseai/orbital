@@ -31,6 +31,14 @@ class FakeAcpValidationTests(unittest.TestCase):
             self.assertEqual(summary["permission_counts"]["permission_count"], 1)
             self.assertEqual(summary["permission_counts"]["denied_permission_count"], 1)
             self.assertIn("permission_denied_or_cancelled", summary["failure_classification"])
+            self.assertTrue(any(item["phase"] == "permission" for item in summary["diagnostic_timeline"]))
+            self.assertTrue(
+                any(
+                    item["code"] == "inspect_permission_outcome"
+                    and item["artifact_ref"].endswith("permissions.jsonl")
+                    for item in summary["diagnostic_explainability"]["diagnostic_next_steps"]
+                )
+            )
             verdict = service.get_run_policy_verdict(summary["run_id"])
             self.assertEqual(verdict["policy_verdict"], "needs_repair")
         finally:
@@ -174,6 +182,11 @@ class FakeAcpValidationTests(unittest.TestCase):
 
             self.assertEqual(summary["status"], "completed")
             self.assertIn("followup_output.txt", summary["changed_files"])
+            phases = {item["phase"] for item in summary["diagnostic_timeline"]}
+            observed_codes = {item["code"] for item in summary["diagnostic_explainability"]["observed"]}
+            self.assertIn("tool", phases)
+            self.assertIn("terminal", phases)
+            self.assertIn("changed_files", observed_codes)
             self.assertTrue((tmp / "followup_output.txt").exists())
         finally:
             remove_tree(tmp)

@@ -6,7 +6,25 @@
 
 Orbital is an MCP delegation layer for running, supervising, and reviewing secondary coding agents.
 
-It runs locally and gives the primary harness a stable control surface for profile selection, ACP/CLI adapter launch, permission mediation, evidence capture, liveness checks, file attribution, and structured handoff sessions.
+It runs locally and gives the primary harness a stable control surface for profile selection, ACP/CLI adapter launch, permission mediation, run artifact capture, liveness checks, fallback file attribution, and structured handoff sessions.
+
+Orbital is not the durable repo-memory layer. It records agent-run diagnostics and exposes attachable run artifacts; a higher-level Prism app should later coordinate those artifacts with `ngitd-core`, which owns repo snapshots, captured changes, durable evidence, terminal dispositions, and lineage. The current integration posture is an artifact contract, not direct `.ngit/` writes or `ngit` subprocess calls from Orbital.
+
+Run summaries expose diagnostic anchors for debugging harness behavior: a primary-safe `diagnostic_timeline` plus `diagnostic_explainability` groups for observed facts, inferred state, unknowns, and next artifact reads.
+
+## Observation Model
+
+Orbital only records what it can see through its own control path. It is not a general observer of every action a primary or secondary harness may take.
+
+Orbital records:
+
+- MCP calls made to Orbital, such as starting runs, resolving permissions, sending follow-up messages, stopping runs, and recording operational attempt reviews.
+- ACP or CLI events from secondary harness processes that Orbital launches and supervises.
+- Run-local artifacts written under `.orbital/`, including run metadata, dialogue events, transcripts, stderr, permission records, and final reports.
+- Fallback workspace observations such as changed paths before and after a run, when the workdir is readable.
+- Correlated local agent-log telemetry, when Orbital can match it exactly by workspace and run time window.
+
+Orbital does not see arbitrary model activity outside that loop. If a primary or secondary harness edits files, runs tools, approves work, or makes decisions without going through Orbital, Orbital only learns about it later if it appears in observable files, logs, telemetry, or an explicit Orbital tool call. Diagnostic fields are therefore derived from recorded artifacts; the primary harness reads and acts on them, but should not fabricate or directly write diagnostic facts.
 
 The current implementation is intentionally CI-safe to validate: the default tests use local fake harnesses and do not require clicks, credentials, network access, real model calls, or installed real harnesses.
 
