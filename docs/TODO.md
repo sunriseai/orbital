@@ -18,14 +18,19 @@ Implemented and currently validated:
 - Manual local ACP smoke currently covers Codex and OpenCode as separate scripts under `tests/manual`; OpenCode smoke evidence recorded OpenCode `1.17.13` and ACP `protocolVersion=1`.
 - Canonical token telemetry is implemented for the practical V1 targets: Codex rollout JSONL under `~/.codex/sessions/**/rollout-*.jsonl` and OpenCode SQLite under `~/.local/share/opencode/opencode.db`. Manual Codex and OpenCode token probes use isolated token workspaces and require exactly one correlated external agent-log record.
 - Initial evidence-gap controls are implemented in primary-safe run outputs: `evidence_status`, `evidence_score`, grouped `evidence_groups`, stable requested-check warning names, and `worker_claim_without_evidence` for prose-only completions.
-- Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fixture replay, fake ACP conformance checks, fake failure fixtures for malformed/unknown/stderr/stop/partial-result behavior, scrubbed Codex/OpenCode transcript excerpts, capability matrix assertions, and deterministic missing-feature reporting.
+- Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fixture replay, fake ACP conformance checks, fake failure fixtures for malformed/unknown/stderr/stop/partial-result behavior, scrubbed Codex/OpenCode transcript excerpts, OpenCode ask-config multi-permission round-trip coverage, OpenCode permission failure-mode fixtures, capability matrix assertions, and deterministic missing-feature reporting.
+- Codex ACP permission routing is documented as local-runtime-config-dependent: `Ask for Approval` can emit ACP permission requests for Orbital to mediate, while `Approve for me` can let the secondary Codex runtime approve internally and complete with `permission_capability_gap`.
+- OpenCode ACP permission routing has a deterministic config lever: `opencode_acp_local_ask` injects `OPENCODE_CONFIG_CONTENT` with `permission.bash=ask` and `permission.edit=ask` so bash/edit permission mediation is not prompt-dependent. Its scrubbed conformance fixture proves a real multi-request `session/request_permission` round trip with `once` approvals, and synthetic failure fixtures lock down denial, missing option IDs, and JSON-RPC resolution-error detection.
+- Codex-as-primary controlling Codex-as-secondary is useful validation coverage, but it is not the targeted product workflow. The practical product goal remains a high-capability primary harness delegating bounded work to smaller, cheaper, local, or specialized secondary harnesses.
 - No real local Claude ACP subscription path has been verified. Claude ACP planning remains API-backed through the Claude Agent SDK until proven otherwise.
 - Smoke-verified real profiles remain `experimental_acp`; no real profile should be promoted to `known_good_acp` until adapter conformance fixtures and smoke evidence both pass.
 
 Current engineering focus:
 
+- Treat diagnostic evidence as the next product control: Orbital cannot make primary or secondary harnesses deterministic, but it can make observations, raw artifacts, normalized timelines, warnings, capability gaps, and next-inspection pointers deterministic enough to diagnose what happened.
 - Broaden the explicit adapter conformance fixture matrix for Codex and OpenCode before expanding it to Pi or Claude Agent SDK ACP.
 - Apply the matrix first to smoke-verified local Codex ACP, official Codex ACP, and OpenCode ACP, because fuller real ACP conformance is the next support-tier gate.
+- Prefer validation that exercises the intended mixed-harness delegation shape over scenarios that only prove a frontier harness can call another instance of itself. The near-term target matrix is Codex and, once verified, Claude as primary harnesses supervising OpenCode through `opencode_acp_local_ask` as the secondary harness.
 - Keep `../ngitd-core` integration, richer SDLC/git attribution, and containerized sandbox enforcement as later layers unless an adapter-conformance task exposes a narrow prerequisite.
 - Keep the TODO below as the remaining implementation, hardening, and promotion backlog. Items that are already partially implemented should be treated as "finish, broaden, or lock down" work, not as absence of any code.
 
@@ -41,6 +46,11 @@ Risk-ranked hardening priorities:
 8. Prompt over-trust: impact 5, likelihood 4, easy now 2. Prompt boundaries are necessary, but deterministic evidence and policy controls are the real mitigation.
 
 Lower-priority for V1: perfect cross-provider cost accounting, full Claude ACP parity, hard sandbox enforcement, hosted service, SDLC workflows, and richer git attribution.
+
+Next-phase diagnostic decision:
+
+- Orbital should be the system of record around nondeterministic harness behavior. It should preserve raw debug artifacts, normalize a concise diagnostic timeline, distinguish observation from inference, and point the operator to the exact artifact to inspect next when confidence is limited.
+- Guardrail tests should stay narrow and product-critical: Codex primary now, Claude primary after setup verification, and OpenCode secondary through the ask-config ACP profile. Broader runtime coverage should follow only after this target path is diagnosable.
 
 ## Risk Workplans
 
@@ -67,6 +77,32 @@ Workplan:
 Decision rule:
 
 - A run can be an `accept_candidate` only when required evidence is present or explicitly marked not requested; otherwise it should be `needs_repair`, `requires_primary_review`, or `blocked`.
+
+### Diagnostic Evidence Layer
+
+Problem:
+
+- Primary and secondary harness behavior will remain partly model- and harness-dependent, even with strong prompts and adapter configuration.
+- Without a complete diagnostic trail, a failed or surprising run can look like a model problem, adapter problem, policy problem, permission gap, or Orbital bug with no reliable way to separate them.
+
+Current Baseline:
+
+- Orbital already stores raw transcripts, stderr, dialogue, permissions, summaries, conformance fixtures, token-source diagnostics, warning groups, and capability-gap classifications.
+- Manual Codex/OpenCode smokes already produce review logs that identify pass/fail outcomes, permission capability gaps, and token telemetry correlation.
+
+Workplan:
+
+- [ ] Define a canonical diagnostic timeline with events for preflight, launch, ACP initialize, session creation, prompt submission, tool start/update/end, permission request/resolution, policy decisions, file/check evidence, telemetry correlation, warnings, capability gaps, terminal result, and raw artifact references.
+- [ ] Add summary fields that separate `observed`, `inferred`, `unknown`, and `diagnostic_next_steps` so primary harnesses do not confuse evidence with interpretation.
+- [ ] Ensure every warning and capability gap points to the raw artifact or normalized event that caused it when such an artifact exists.
+- [ ] Preserve bounded raw protocol payload references for permission requests, adapter responses, tool calls, final result payloads, stderr, and token-source correlation without exposing them in primary-safe summaries by default.
+- [ ] Extend manual smoke review logs to assert the presence of diagnostic anchors: selected profile/config, ACP initialize details, permission mode/config, request option IDs, selected decisions, terminal status, token correlation result, warnings, and capability gaps.
+- [ ] Add regression tests for diagnostic timelines on successful runs, permission-denied runs, permission capability gaps, failed checks, missing evidence, JSON-RPC errors, and telemetry ambiguity.
+- [ ] Prioritize target-path smokes and fixtures for Codex primary supervising OpenCode secondary through `opencode_acp_local_ask`; add Claude primary once its setup path is verified.
+
+Decision rule:
+
+- When Orbital cannot fully control or verify harness behavior, it should preserve enough evidence to explain the uncertainty and recommend the next specific artifact or summary field to inspect.
 
 ### Adapter Drift
 
@@ -104,6 +140,8 @@ Current Baseline:
 - Permission option resolution fails closed: explicit adapter option IDs are preferred, approve/deny inference is allowed only when exactly one option matches, stale restart-visible permissions return `permission_not_resolvable_after_restart`, mismatched adapter request IDs return `unknown_adapter_request`, and adapter resolution failures are appended as audit evidence before returning `adapter_permission_resolution_failed`.
 - Fake ACP and service-level regression tests cover explicit approval, explicit denial, ambiguous options, adapter request mismatch, restart-visible pending permissions, resolved permissions, and adapter resolution failure evidence.
 - Manual Codex/OpenCode permission smoke wrappers classify no-request real-runtime completions as `permission_capability_gap` rather than treating them as verified approval mediation.
+- OpenCode-specific permission behavior is now part of the planning baseline: `opencode_acp_local_ask` can force ACP permission requests by configuration, OpenCode may emit multiple permission requests during one task, and its `once`/`always`/`reject` options should be normalized without making Orbital core OpenCode-specific.
+- OpenCode ask-config conformance now includes fixture coverage for a rejected permission, malformed/missing request option IDs, and a JSON-RPC permission resolution error; these fixtures prove detection and auditability, not support-tier promotion.
 
 Workplan:
 
@@ -115,7 +153,9 @@ Workplan:
 - [ ] Add policy evidence that says whether a risky action was prevented, mediated, or only observed.
 - [ ] Add post-restart behavior: stored pending permissions remain visible as evidence, but `resolve_permission` returns `permission_not_resolvable_after_restart` unless adapter reattachment is implemented.
 - [ ] Add regression tests for explicit approval, explicit denial, ambiguous options, missing options, stale request IDs, resolved permissions, restart-visible pending permissions, and adapter resolution failure.
-- [ ] Identify a Codex/OpenCode ACP permission mode or runtime configuration that forces a real permission request, then rerun the wrappers until they produce a full approval-round-trip `pass`.
+- [ ] Broaden OpenCode ask-config permission conformance beyond the current happy path plus denial, missing option ID, and JSON-RPC error fixtures to cover ambiguous options and mixed allow/deny multi-request outcomes.
+- [ ] Add policy tests that exercise primary decisions over multiple OpenCode permission requests with mixed allow/deny outcomes.
+- [ ] Keep refining OpenCode request-context display in primary-safe summaries so command/action/path/risk evidence is easy to inspect without raw transcript reads.
 
 Decision rule:
 
@@ -312,7 +352,7 @@ Tests:
 - [ ] Add first-class profile templates for OpenCode, Pi, Codex, Claude Code CLI, and Claude Agent SDK ACP with honest support tiers.
 - [ ] Preserve the Claude split: `claude_code_cli_local` is the local/subscription fallback, and `claude_agent_acp_api` is disabled or explicit API-backed ACP.
 - [ ] Document Claude ACP as `claude-agent-acp` through the Claude Agent SDK with `ANTHROPIC_API_KEY`, not as a Claude Code CLI subscription path.
-- [ ] Record current smoke evidence in profile metadata or docs: Codex local ACP manual smoke passed, OpenCode local ACP manual smoke passed with OpenCode `1.17.13` and ACP `protocolVersion=1`.
+- [ ] Broaden recorded smoke evidence in profile metadata or docs as additional Codex/OpenCode permission, failure-mode, and stop/cancel fixtures are added.
 - [ ] Keep smoke-verified profiles at `experimental_acp` until adapter conformance fixtures justify `known_good_acp`.
 - [ ] Keep API-backed profiles disabled or explicit by default.
 - [ ] Prevent hidden profile switching inside a handoff session.
@@ -407,6 +447,9 @@ Tests:
 - [ ] Allow primary-mediated approval for risky actions when the adapter can pause.
 - [ ] Preserve the complete permission round trip: secondary request, primary-facing decision context, selected adapter option ID, adapter response, and run outcome after the decision.
 - [ ] Record whether a violation was prevented, mediated, or only observed after the fact.
+- [ ] Use OpenCode granular permission config as a profile-level enforcement lever, not as a core policy dependency: start with `bash=ask` and `edit=ask`, then consider narrower allow/deny patterns only after generic policy tests exist.
+- [ ] Preserve and display OpenCode's structured permission context through the generic permission model so the primary can decide from command/action/path/risk evidence.
+- [ ] Avoid automatic OpenCode `always` approvals unless the primary explicitly chooses a session-scoped policy change.
 
 Acceptance criteria:
 

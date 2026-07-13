@@ -174,10 +174,11 @@ def main() -> None:
             if "with permission" in prompt.lower():
                 ambiguous = "AMBIGUOUS_PERMISSION" in prompt
                 codex_camel = "CODEX_CAMEL_PERMISSION" in prompt
+                zero_id = "ZERO_PERMISSION_ID" in prompt
                 send(
                     {
                         "jsonrpc": "2.0",
-                        "id": 77,
+                        "id": 0 if zero_id else 77,
                         "method": "requestPermission" if codex_camel else "session/request_permission",
                         "params": {
                             "summary": "Edit fake_output.txt",

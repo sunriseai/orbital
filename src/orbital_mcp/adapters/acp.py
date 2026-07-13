@@ -232,7 +232,7 @@ class AcpWorkerController:
                         await self._abort(AcpProtocolError(f"{violation.reason}: {violation.command}"))
             return
         if method in PERMISSION_REQUEST_METHODS:
-            adapter_id = str(message.get("id") or params.get("request_id") or params.get("id"))
+            adapter_id = _adapter_request_id(message, params)
             self._pending_permission_request_ids.add(adapter_id)
             await self.sink.permission_requested(normalize_permission(self.run_id, adapter_id, message))
             return
@@ -254,6 +254,13 @@ def _decode_jsonrpc_id(value: str) -> int | str:
         return int(value)
     except ValueError:
         return value
+
+
+def _adapter_request_id(message: dict[str, Any], params: dict[str, Any]) -> str:
+    for value in (message.get("id"), params.get("request_id"), params.get("id")):
+        if value is not None:
+            return str(value)
+    return "missing"
 
 
 def _profile_model_id(profile: HarnessProfile | None) -> str | None:

@@ -128,6 +128,7 @@ Suggested schema:
     "tier": "experimental_acp",
     "notes": [
       "Manual local smoke passed with OpenCode 1.17.13 and ACP protocolVersion 1.",
+      "Use opencode_acp_local_ask when bash/edit permission mediation must be forced by config.",
       "Do not promote to known_good_acp until adapter conformance fixtures pass."
     ]
   },
@@ -198,19 +199,23 @@ For example, a CLI profile can be ready and useful while still reporting `cli_fa
 Current local smoke evidence:
 
 - `codex_acp_local`: manual local ACP smoke passed through the legacy Zed `codex-acp` command using local subscription auth. Permission probes against this adapter may complete without ACP permission requests because Codex internal approval handling can absorb the event.
-- `codex_acp_official`: experimental side-by-side profile for the maintained `@agentclientprotocol/codex-acp` app-server adapter. It runs through `npx -y @agentclientprotocol/codex-acp` with `INITIAL_AGENT_MODE=read-only` so edits and commands should exercise approval mediation when the adapter surfaces ACP permission events.
+- `codex_acp_official`: experimental side-by-side profile for the maintained `@agentclientprotocol/codex-acp` app-server adapter. It runs through `npx -y @agentclientprotocol/codex-acp` with `INITIAL_AGENT_MODE=read-only`. Permission behavior is runtime-config-dependent: with local Codex set to `Ask for Approval`, the official adapter can emit ACP `session/request_permission` events that Orbital observes and resolves; with `Approve for me`, the secondary Codex runtime can approve internally and complete without an ACP permission event.
 - `opencode_acp_local`: manual local ACP smoke passed through `opencode acp --pure`; preflight recorded OpenCode `1.17.13` and ACP `protocolVersion=1`.
+- `opencode_acp_local_ask`: same OpenCode ACP path with `OPENCODE_CONFIG_CONTENT` setting `permission.bash=ask` and `permission.edit=ask`; use it for primary-mediated OpenCode permission tests and delegations.
 - `claude_code_cli_local`: local/subscription Claude path is CLI fallback through `claude`, not ACP.
 - `claude_agent_acp_api`: disabled API-backed ACP profile via `claude-agent-acp`; explicit setup is required and it is not smoke-verified yet.
+
+Codex-as-primary controlling Codex-as-secondary is a useful conformance and local-subscription validation scenario, but it is not the target deployment model. Orbital should optimize for a high-capability primary harness delegating bounded work to secondary harnesses chosen for cost, locality, model size, specialization, or adapter capabilities. Same-runtime permission behavior should therefore be documented as a support caveat, not treated as the main product path.
 
 Current conformance fixture evidence:
 
 - `fake_acp`: fixture replay covers core ACP flow, complete permission approval round trip, malformed JSON-RPC, unknown event shapes, stderr-only failure, cooperative cancel, and partial terminal result behavior.
 - `codex_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, dialogue, tools, usage updates, and terminal result; permissions are currently represented as a capability gap.
 - `codex_acp_official`: scrubbed fixture replay covers the app-server adapter's permission-capability-gap run, tool/guardian events, model metadata, adapter usage payloads, and terminal result.
-- `opencode_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, edit tool events, dialogue, adapter usage payloads, and terminal result; permissions are currently represented as a capability gap.
+- `opencode_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, edit tool events, dialogue, adapter usage payloads, and terminal result; permissions are represented as a capability gap for the default/user-configured profile.
+- `opencode_acp_local_ask`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, execute tool events, two ACP `session/request_permission` events, explicit `once`/`always`/`reject` option IDs, two `once` resolutions, adapter usage payloads, and terminal result. Synthetic failure fixtures additionally cover a rejected permission, missing request option IDs, and a JSON-RPC permission resolution error so Orbital can distinguish mediated denial, malformed request context, and adapter/protocol failure.
 
-Smoke evidence is necessary but not sufficient for `known_good_acp`. A profile remains `experimental_acp` until adapter conformance fixtures cover initialization, prompt submission, event normalization, permissions, stop/cancel behavior, stderr, and telemetry expectations.
+Smoke evidence and narrow conformance fixtures are necessary but not sufficient for `known_good_acp`. A profile remains `experimental_acp` until adapter conformance fixtures cover initialization, prompt submission, event normalization, permissions, stop/cancel behavior, stderr, and telemetry expectations.
 
 Claude support should be modeled as two separate profile families:
 

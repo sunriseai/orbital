@@ -1,0 +1,39 @@
+{
+  "fixture_id": "opencode_ask_permission_round_trip",
+  "profile_id": "opencode_acp_local_ask",
+  "runtime_family": "opencode",
+  "source": "scrubbed excerpt derived from local_opencode_acp_permission_smoke_20260712T150238Z.log",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"configOptions\":[{\"id\":\"model\",\"currentValue\":\"opencode/glm-5.2\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"available_commands_update\",\"availableCommands\":[{\"name\":\"review\"}]}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-1\",\"title\":\"bash\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"cwd\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-1\",\"status\":\"in_progress\",\"kind\":\"execute\",\"title\":\"echo \\\"OpenCode executed a shell-command permission smoke through Orbital MCP.\\\" > PERMISSION_SMOKE.md\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"command\":\"echo \\\"OpenCode executed a shell-command permission smoke through Orbital MCP.\\\" > PERMISSION_SMOKE.md\",\"workdir\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"toolCall\":{\"toolCallId\":\"tool-1\",\"title\":\"echo \\\"OpenCode executed a shell-command permission smoke through Orbital MCP.\\\" > PERMISSION_SMOKE.md\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{\"command\":\"echo \\\"OpenCode executed a shell-command permission smoke through Orbital MCP.\\\" > PERMISSION_SMOKE.md\"}},\"options\":[{\"optionId\":\"once\",\"kind\":\"allow_once\",\"name\":\"Allow once\"},{\"optionId\":\"always\",\"kind\":\"allow_always\",\"name\":\"Always allow\"},{\"optionId\":\"reject\",\"kind\":\"reject_once\",\"name\":\"Reject\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"once\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-1\",\"status\":\"completed\",\"title\":\"echo \\\"OpenCode executed a shell-command permission smoke through Orbital MCP.\\\" > PERMISSION_SMOKE.md\",\"rawOutput\":{\"output\":\"(no output)\",\"metadata\":{\"exit\":0}}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-2\",\"title\":\"bash\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"cwd\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"toolCall\":{\"toolCallId\":\"tool-2\",\"title\":\"cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{\"command\":\"cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md\"}},\"options\":[{\"optionId\":\"once\",\"kind\":\"allow_once\",\"name\":\"Allow once\"},{\"optionId\":\"always\",\"kind\":\"allow_always\",\"name\":\"Always allow\"},{\"optionId\":\"reject\",\"kind\":\"reject_once\",\"name\":\"Reject\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"once\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-2\",\"status\":\"in_progress\",\"kind\":\"execute\",\"title\":\"cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"command\":\"cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md\",\"workdir\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-2\",\"status\":\"completed\",\"title\":\"cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md\",\"rawOutput\":{\"output\":\"OpenCode executed a shell-command permission smoke through Orbital MCP.\\n-rw-r--r-- 1 user staff 72 PERMISSION_SMOKE.md\\n\",\"metadata\":{\"exit\":0}}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"msg-1\",\"content\":{\"type\":\"text\",\"text\":\"Done. PERMISSION_SMOKE.md was created and verified.\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"usage_update\",\"used\":8083,\"size\":1000000,\"cost\":{\"amount\":0.01642652,\"currency\":\"USD\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":127,\"outputTokens\":48,\"totalTokens\":8131,\"cachedReadTokens\":7956},\"_meta\":{}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update", "session/request_permission"],
+    "session_updates": ["available_commands_update", "tool_call", "tool_call_update", "agent_message_chunk", "usage_update"],
+    "normalized_features": ["dialogue", "tools", "permissions", "terminal_result"],
+    "result_statuses": ["end_turn"],
+    "permission_option_ids": ["once"],
+    "permission_behavior": "multi_round_trip",
+    "min_permission_request_count": 2,
+    "min_permission_resolution_count": 2,
+    "require_usage_payload": true
+  }
+}

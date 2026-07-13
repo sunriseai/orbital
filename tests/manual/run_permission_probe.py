@@ -40,15 +40,21 @@ async def _run(base_dir: Path, workdir: Path, profile_id: str, timeout: float) -
     response = await service.start_task_run(workdir, task, profile_id=profile_id)
     run_id = response["run_id"]
     deadline = asyncio.get_running_loop().time() + timeout
-    permission_id: str | None = None
-    resolution: dict[str, Any] | None = None
+    permission_ids: list[str] = []
+    resolutions: list[dict[str, Any]] = []
+    resolved_permission_ids: set[str] = set()
 
     while asyncio.get_running_loop().time() < deadline:
         summary = service.get_run_summary(run_id)
         pending = summary.get("pending_permission_requests") or []
         if pending:
-            permission = pending[0]
+            permission = next(
+                (item for item in pending if item.get("permission_id") not in resolved_permission_ids),
+                pending[0],
+            )
             permission_id = permission["permission_id"]
+            resolved_permission_ids.add(permission_id)
+            permission_ids.append(permission_id)
             option_id = _choose_allow_option(permission)
             print("Observed pending permission:")
             print(json.dumps(permission, indent=2, sort_keys=True))
@@ -61,22 +67,24 @@ async def _run(base_dir: Path, workdir: Path, profile_id: str, timeout: float) -
             )
             print("Resolution:")
             print(json.dumps(resolution["permission"], indent=2, sort_keys=True))
-            break
+            resolutions.append(resolution)
+            continue
         if summary["status"] in TERMINAL:
-            result = "permission_capability_gap" if _completed_without_permission(summary) else "no_permission_observed"
-            return _result(result, service, run_id, permission_id, resolution)
+            if _passed(summary):
+                return _result("pass", service, run_id, permission_ids, resolutions)
+            if permission_ids:
+                result = "permission_observed_but_run_failed"
+            else:
+                result = "permission_capability_gap" if _completed_without_permission(summary) else "no_permission_observed"
+            return _result(result, service, run_id, permission_ids, resolutions)
         await asyncio.sleep(0.25)
 
-    if permission_id is None:
-        return _result("timeout_waiting_for_permission", service, run_id, permission_id, resolution)
+    if not permission_ids:
+        await _stop_run_if_active(service, run_id)
+        return _result("timeout_waiting_for_permission", service, run_id, permission_ids, resolutions)
 
-    while asyncio.get_running_loop().time() < deadline:
-        summary = service.get_run_summary(run_id)
-        if summary["status"] in TERMINAL:
-            return _result("pass" if _passed(summary) else "permission_observed_but_run_failed", service, run_id, permission_id, resolution)
-        await asyncio.sleep(0.25)
-
-    return _result("timeout_after_permission", service, run_id, permission_id, resolution)
+    await _stop_run_if_active(service, run_id)
+    return _result("timeout_after_permission", service, run_id, permission_ids, resolutions)
 
 
 def _choose_allow_option(permission: dict[str, Any]) -> str | None:
@@ -101,12 +109,18 @@ def _completed_without_permission(summary: dict[str, Any]) -> bool:
     return summary.get("status") == "completed" and counts.get("permission_count", 0) == 0
 
 
+async def _stop_run_if_active(service, run_id: str) -> None:
+    summary = service.get_run_summary(run_id)
+    if summary.get("status") not in TERMINAL:
+        await service.stop_task_run(run_id)
+
+
 def _result(
     result: str,
     service,
     run_id: str,
-    permission_id: str | None,
-    resolution: dict[str, Any] | None,
+    permission_ids: list[str],
+    resolutions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     summary = service.get_run_summary(run_id, max_events=200)
     notes = []
@@ -119,8 +133,10 @@ def _result(
         "result": result,
         "result_notes": notes,
         "run_id": run_id,
-        "permission_id": permission_id,
-        "resolution": resolution,
+        "permission_id": permission_ids[0] if permission_ids else None,
+        "permission_ids": permission_ids,
+        "resolution": resolutions[0] if resolutions else None,
+        "resolutions": resolutions,
         "summary": summary,
         "transcript_tail": service.get_run_log_tail(run_id, "transcript.log", max_bytes=20_000),
         "stderr_tail": service.get_run_log_tail(run_id, "stderr.log", max_bytes=10_000),
@@ -143,9 +159,11 @@ def _list_env(name: str, default: list[str]) -> list[str]:
 
 def _default_objective() -> str:
     return (
-        "Create PERMISSION_SMOKE.md by running a shell command rather than by direct file editing. "
-        "If your harness asks for approval, request approval and wait. The file should contain one "
-        "sentence explaining that the worker executed a permission smoke through Orbital MCP."
+        "Before creating any file or running any shell command, explicitly request permission from "
+        "your host/client and wait for approval. After approval, create PERMISSION_SMOKE.md by "
+        "running a shell command rather than by direct file editing. "
+        "The file should contain one sentence explaining that the worker executed a permission smoke "
+        "through Orbital MCP."
     )
 
 

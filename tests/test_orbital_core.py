@@ -51,6 +51,18 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertEqual(profile.support.tier, "experimental_acp")
         self.assertEqual(config.storage_root, ".orbital")
 
+    def test_default_profiles_include_opencode_ask_permission_variant(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+        profile = next(item for item in config.profiles if item.id == "opencode_acp_local_ask")
+        opencode_config = json.loads(profile.env["OPENCODE_CONFIG_CONTENT"])
+
+        self.assertEqual(profile.command, ["opencode", "acp", "--pure"])
+        self.assertEqual(profile.runtime_family, "opencode")
+        self.assertIn("permissions", profile.capabilities)
+        self.assertEqual(opencode_config["permission"]["bash"], "ask")
+        self.assertEqual(opencode_config["permission"]["edit"], "ask")
+        self.assertIn("permission_smoke", profile.classification.task_tags)
+
     def test_default_profiles_separate_claude_cli_from_api_backed_agent_acp(self) -> None:
         config = load_config(Path("/tmp/orbital-config-does-not-exist"))
         profile_ids = {item.id for item in config.profiles}
@@ -505,6 +517,42 @@ class OrbitalCoreTests(unittest.TestCase):
         )
 
         self.assertEqual(choose_option(request, "approve", explicit_option_id="allow-write"), "allow-write")
+        with self.assertRaisesRegex(ValueError, "ambiguous approve options"):
+            choose_option(request, "approve")
+
+    def test_opencode_permission_options_preserve_once_always_reject_semantics(self) -> None:
+        request = normalize_permission(
+            "task-run-opencode-permission",
+            "0",
+            {
+                "jsonrpc": "2.0",
+                "id": 0,
+                "method": "session/request_permission",
+                "params": {
+                    "toolCall": {
+                        "kind": "execute",
+                        "title": "cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md",
+                        "rawInput": {"command": "cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md"},
+                    },
+                    "options": [
+                        {"optionId": "once", "kind": "allow_once", "name": "Allow once"},
+                        {"optionId": "always", "kind": "allow_always", "name": "Always allow"},
+                        {"optionId": "reject", "kind": "reject_once", "name": "Reject"},
+                    ],
+                },
+            },
+        )
+
+        self.assertEqual(request.risk, "execute")
+        self.assertEqual(request.summary, "cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md")
+        self.assertEqual(request.command, "cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md")
+        self.assertEqual([(option.option_id, option.kind) for option in request.options], [
+            ("once", "allow_once"),
+            ("always", "allow_always"),
+            ("reject", "reject_once"),
+        ])
+        self.assertEqual(choose_option(request, "approve", explicit_option_id="once"), "once")
+        self.assertEqual(choose_option(request, "deny"), "reject")
         with self.assertRaisesRegex(ValueError, "ambiguous approve options"):
             choose_option(request, "approve")
 

@@ -1,0 +1,29 @@
+{
+  "fixture_id": "opencode_permission_jsonrpc_error",
+  "profile_id": "opencode_acp_local_ask",
+  "runtime_family": "opencode",
+  "source": "synthetic scrubbed OpenCode ACP permission transcript with JSON-RPC error response",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<OPENCODE_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-1\",\"title\":\"bash\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"cwd\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"toolCall\":{\"toolCallId\":\"tool-1\",\"title\":\"echo unsafe\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{\"command\":\"echo unsafe\"}},\"options\":[{\"optionId\":\"once\",\"kind\":\"allow_once\",\"name\":\"Allow once\"},{\"optionId\":\"reject\",\"kind\":\"reject_once\",\"name\":\"Reject\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":0,\"error\":{\"code\":-32000,\"message\":\"permission resolution failed\"}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":44,\"outputTokens\":10,\"totalTokens\":54},\"_meta\":{}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update", "session/request_permission"],
+    "session_updates": ["tool_call"],
+    "normalized_features": ["tools", "permissions", "jsonrpc_error", "terminal_result"],
+    "result_statuses": ["end_turn"],
+    "permission_request_option_ids": ["once", "reject"],
+    "permission_behavior": "not_applicable",
+    "min_permission_request_count": 1,
+    "min_jsonrpc_error_count": 1,
+    "require_usage_payload": true
+  }
+}

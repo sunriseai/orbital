@@ -29,6 +29,7 @@ FIXTURE_DIR = ROOT / "tests" / "fixtures" / "acp_conformance"
 REAL_PROFILE_FIXTURES = [
     "codex_legacy_smoke.json",
     "codex_official_permission_gap.json",
+    "opencode_ask_permission_round_trip.json",
     "opencode_smoke.json",
 ]
 
@@ -122,8 +123,48 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 "tools": True,
                 "permissions": False,
                 "permission_round_trip": False,
+                "multi_permission_round_trip": False,
                 "adapter_usage_payload": True,
                 "model_metadata": False,
+            },
+            "opencode_ask_permission_round_trip": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": True,
+                "permission_round_trip": True,
+                "multi_permission_round_trip": True,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+            },
+            "opencode_permission_denied": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": True,
+                "permission_round_trip": True,
+                "multi_permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+                "jsonrpc_errors": False,
+            },
+            "opencode_permission_jsonrpc_error": {
+                "dialogue": False,
+                "tools": True,
+                "permissions": True,
+                "permission_round_trip": False,
+                "multi_permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+                "jsonrpc_errors": True,
+            },
+            "opencode_permission_missing_option_ids": {
+                "dialogue": False,
+                "tools": True,
+                "permissions": True,
+                "permission_round_trip": False,
+                "multi_permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+                "jsonrpc_errors": False,
             },
         }
 
@@ -142,7 +183,10 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
             for fixture in REAL_PROFILE_FIXTURES
         }
 
-        self.assertEqual(fixture_profiles, {"codex_acp_local", "codex_acp_official", "opencode_acp_local"})
+        self.assertEqual(
+            fixture_profiles,
+            {"codex_acp_local", "codex_acp_official", "opencode_acp_local", "opencode_acp_local_ask"},
+        )
         for profile_id in fixture_profiles:
             self.assertEqual(profiles[profile_id].support.tier, "experimental_acp")
 
@@ -152,6 +196,46 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
             if profile.support.tier == "known_good_acp" and profile.id in fixture_profiles
         ]
         self.assertEqual(known_good_real_profiles, [])
+
+    def test_opencode_ask_permission_fixture_proves_multi_request_round_trip(self) -> None:
+        report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_ask_permission_round_trip.json")
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["profile_id"], "opencode_acp_local_ask")
+        self.assertEqual(report["observed"]["permission_request_count"], 2)
+        self.assertEqual(report["observed"]["permission_resolution_count"], 2)
+        self.assertEqual(report["observed"]["permission_option_ids"], ["once"])
+        self.assertTrue(report["capabilities"]["multi_permission_round_trip"])
+
+    def test_opencode_permission_denial_fixture_preserves_reject_context(self) -> None:
+        report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_permission_denied.json")
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["profile_id"], "opencode_acp_local_ask")
+        self.assertEqual(report["observed"]["permission_request_count"], 1)
+        self.assertEqual(report["observed"]["permission_resolution_count"], 1)
+        self.assertEqual(report["observed"]["permission_request_option_ids"], ["once", "always", "reject"])
+        self.assertEqual(report["observed"]["permission_option_ids"], ["reject"])
+        self.assertTrue(report["capabilities"]["permission_round_trip"])
+
+    def test_opencode_missing_option_ids_fixture_reports_gap(self) -> None:
+        report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_permission_missing_option_ids.json")
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["observed"]["permission_request_count"], 1)
+        self.assertEqual(report["observed"]["permission_request_missing_option_id_count"], 2)
+        self.assertEqual(report["observed"]["permission_request_option_ids"], [])
+        self.assertFalse(report["capabilities"]["permission_round_trip"])
+
+    def test_opencode_permission_jsonrpc_error_fixture_reports_protocol_error(self) -> None:
+        report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_permission_jsonrpc_error.json")
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["observed"]["permission_request_count"], 1)
+        self.assertEqual(report["observed"]["permission_resolution_count"], 0)
+        self.assertEqual(report["observed"]["jsonrpc_error_count"], 1)
+        self.assertIn("jsonrpc_error", report["observed"]["normalized_features"])
+        self.assertTrue(report["capabilities"]["jsonrpc_errors"])
 
     def test_conformance_report_lists_missing_expected_features(self) -> None:
         transcript = '> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
@@ -345,6 +429,36 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
         finally:
             remove_tree(tmp)
 
+    def test_fake_acp_zero_permission_id_is_preserved_and_resolved(self) -> None:
+        tmp = ROOT / ".tmp-test-acp-conformance-zero-permission-id"
+        try:
+            tmp.mkdir(exist_ok=True)
+            service = fake_acp_service(tmp)
+
+            resolution, summary = run_async(_permission_approval_flow(service, tmp, zero_id=True))
+            run_id = summary["run_id"]
+
+            self.assertEqual(summary["status"], "completed")
+            self.assertEqual(resolution["permission"]["adapter_request_id"], "0")
+            self.assertEqual(resolution["permission"]["permission_id"], f"perm-{run_id}-0")
+            self.assertEqual(resolution["permission"]["resolved_option_id"], "allow")
+
+            permissions = _jsonl(tmp / ".orbital" / "runs" / run_id / "permissions.jsonl")
+            self.assertEqual([item["adapter_request_id"] for item in permissions], ["0", "0"])
+            self.assertEqual([item["status"] for item in permissions], ["pending", "approved"])
+
+            transcript = service.get_run_log_tail(run_id, "transcript.log", max_bytes=50_000)["text"]
+            permission_replies = [
+                item["message"]
+                for item in _protocol_messages(transcript)
+                if item["direction"] == ">"
+                and item["message"].get("id") == 0
+                and item["message"].get("result", {}).get("outcome")
+            ]
+            self.assertEqual(permission_replies[0]["result"]["outcome"]["optionId"], "allow")
+        finally:
+            remove_tree(tmp)
+
     def test_fake_acp_permission_denial_preserves_complete_round_trip(self) -> None:
         tmp = ROOT / ".tmp-test-acp-conformance-permission-denial"
         try:
@@ -383,10 +497,14 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
             remove_tree(tmp)
 
 
-async def _permission_approval_flow(service, tmp: Path, codex_camel: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
+async def _permission_approval_flow(
+    service, tmp: Path, codex_camel: bool = False, zero_id: bool = False
+) -> tuple[dict[str, Any], dict[str, Any]]:
     objective = "Implement fake task with permission."
     if codex_camel:
         objective += " CODEX_CAMEL_PERMISSION"
+    if zero_id:
+        objective += " ZERO_PERMISSION_ID"
     response = await service.start_task_run(
         tmp,
         task(objective, allowed_paths=["fake_output.txt"]),

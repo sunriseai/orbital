@@ -14,10 +14,15 @@ class AcpConformanceExpectation:
     normalized_features: list[str] = field(default_factory=list)
     result_statuses: list[str] = field(default_factory=list)
     permission_option_ids: list[str] = field(default_factory=list)
+    permission_request_option_ids: list[str] = field(default_factory=list)
     unknown_methods: list[str] = field(default_factory=list)
     unknown_session_updates: list[str] = field(default_factory=list)
     malformed_line_numbers: list[int] = field(default_factory=list)
     permission_behavior: str | None = None
+    min_permission_request_count: int = 0
+    min_permission_resolution_count: int = 0
+    min_permission_request_missing_option_id_count: int = 0
+    min_jsonrpc_error_count: int = 0
     require_usage_payload: bool = False
     require_model_metadata: bool = False
     require_stderr: bool = False
@@ -41,7 +46,7 @@ REQUIRED_FIXTURE_FIELDS = {
 }
 
 
-SUPPORTED_PERMISSION_BEHAVIORS = {"round_trip", "capability_gap", "not_applicable"}
+SUPPORTED_PERMISSION_BEHAVIORS = {"round_trip", "multi_round_trip", "capability_gap", "not_applicable"}
 
 
 def evaluate_acp_conformance(transcript: str, expectation: AcpConformanceExpectation) -> dict[str, Any]:
@@ -54,6 +59,10 @@ def evaluate_acp_conformance(transcript: str, expectation: AcpConformanceExpecta
         "normalized_features": _missing(expectation.normalized_features, observed["normalized_features"]),
         "result_statuses": _missing(expectation.result_statuses, observed["result_statuses"]),
         "permission_option_ids": _missing(expectation.permission_option_ids, observed["permission_option_ids"]),
+        "permission_request_option_ids": _missing(
+            expectation.permission_request_option_ids,
+            observed["permission_request_option_ids"],
+        ),
         "unknown_methods": _missing(expectation.unknown_methods, observed["unknown_methods"]),
         "unknown_session_updates": _missing(expectation.unknown_session_updates, observed["unknown_session_updates"]),
         "malformed_lines": _missing_ints(expectation.malformed_line_numbers, observed["malformed_lines"]),
@@ -61,6 +70,26 @@ def evaluate_acp_conformance(transcript: str, expectation: AcpConformanceExpecta
         "model_metadata": ["model_metadata"] if expectation.require_model_metadata and not observed["models"] else [],
         "stderr": ["stderr"] if expectation.require_stderr and not observed["stderr_lines"] else [],
         "permission_behavior": _missing_permission_behavior(expectation.permission_behavior, observed),
+        "permission_request_count": _missing_min_count(
+            "permission_request_count",
+            expectation.min_permission_request_count,
+            observed["permission_request_count"],
+        ),
+        "permission_resolution_count": _missing_min_count(
+            "permission_resolution_count",
+            expectation.min_permission_resolution_count,
+            observed["permission_resolution_count"],
+        ),
+        "permission_request_missing_option_id_count": _missing_min_count(
+            "permission_request_missing_option_id_count",
+            expectation.min_permission_request_missing_option_id_count,
+            observed["permission_request_missing_option_id_count"],
+        ),
+        "jsonrpc_error_count": _missing_min_count(
+            "jsonrpc_error_count",
+            expectation.min_jsonrpc_error_count,
+            observed["jsonrpc_error_count"],
+        ),
     }
     unexpected_malformed_lines = _unexpected_ints(expectation.malformed_line_numbers, observed["malformed_lines"])
     return {
@@ -100,10 +129,17 @@ def load_acp_conformance_fixture(path: Path | str) -> AcpConformanceFixture:
             normalized_features=_string_list(expectation.get("normalized_features")),
             result_statuses=_string_list(expectation.get("result_statuses")),
             permission_option_ids=_string_list(expectation.get("permission_option_ids")),
+            permission_request_option_ids=_string_list(expectation.get("permission_request_option_ids")),
             unknown_methods=_string_list(expectation.get("unknown_methods")),
             unknown_session_updates=_string_list(expectation.get("unknown_session_updates")),
             malformed_line_numbers=_int_list(expectation.get("malformed_line_numbers")),
             permission_behavior=permission_behavior,
+            min_permission_request_count=int(expectation.get("min_permission_request_count", 0) or 0),
+            min_permission_resolution_count=int(expectation.get("min_permission_resolution_count", 0) or 0),
+            min_permission_request_missing_option_id_count=int(
+                expectation.get("min_permission_request_missing_option_id_count", 0) or 0
+            ),
+            min_jsonrpc_error_count=int(expectation.get("min_jsonrpc_error_count", 0) or 0),
             require_usage_payload=bool(expectation.get("require_usage_payload", False)),
             require_model_metadata=bool(expectation.get("require_model_metadata", False)),
             require_stderr=bool(expectation.get("require_stderr", False)),
@@ -129,10 +165,13 @@ def capability_matrix(observed: dict[str, Any]) -> dict[str, bool]:
         "tools": "tools" in features,
         "permissions": "permissions" in features,
         "permission_round_trip": bool(observed.get("permission_option_ids")),
+        "multi_permission_round_trip": int(observed.get("permission_request_count") or 0) >= 2
+        and int(observed.get("permission_resolution_count") or 0) >= 2,
         "stop_or_cancel": "stop_or_cancel" in features,
         "stderr": "stderr" in features,
         "unknown_payloads": bool(observed.get("unknown_methods") or observed.get("unknown_session_updates")),
         "malformed_payloads": bool(observed.get("malformed_lines")),
+        "jsonrpc_errors": bool(observed.get("jsonrpc_error_count")),
         "model_metadata": bool(observed.get("models")),
         "adapter_usage_payload": bool(observed.get("usage_payload_count")),
         "terminal_result": "terminal_result" in features,
@@ -171,6 +210,11 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
         "normalized_features": [],
         "result_statuses": [],
         "permission_option_ids": [],
+        "permission_request_option_ids": [],
+        "permission_request_count": 0,
+        "permission_resolution_count": 0,
+        "permission_request_missing_option_id_count": 0,
+        "jsonrpc_error_count": 0,
         "models": [],
         "usage_payload_count": 0,
         "malformed_lines": [],
@@ -188,6 +232,9 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
             _append_unique(observed["normalized_features"], "stderr")
             continue
         message = item.get("message") if isinstance(item.get("message"), dict) else {}
+        if isinstance(message.get("error"), dict):
+            observed["jsonrpc_error_count"] += 1
+            _append_unique(observed["normalized_features"], "jsonrpc_error")
         direction = item.get("direction")
         method = message.get("method")
         if direction == ">" and method:
@@ -200,6 +247,8 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
             _append_unique(observed["normalized_features"], "stop_or_cancel")
         if str(method) in {"requestPermission", "session/requestPermission", "session.requestPermission", "session/request_permission", "permission/request"}:
             _append_unique(observed["normalized_features"], "permissions")
+            observed["permission_request_count"] += 1
+            _append_permission_request_options(observed, message)
 
         result = message.get("result") if isinstance(message.get("result"), dict) else {}
         if isinstance(result.get("status"), str):
@@ -212,6 +261,7 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(outcome.get("optionId"), str):
             _append_unique(observed["permission_option_ids"], outcome["optionId"])
             _append_unique(observed["normalized_features"], "permissions")
+            observed["permission_resolution_count"] += 1
 
         params = message.get("params") if isinstance(message.get("params"), dict) else {}
         update = params.get("update") if isinstance(params.get("update"), dict) else {}
@@ -244,6 +294,14 @@ def _missing_permission_behavior(expected: str | None, observed: dict[str, Any])
     features = set(observed.get("normalized_features") or [])
     if expected == "round_trip":
         return [] if "permissions" in features and observed.get("permission_option_ids") else ["round_trip"]
+    if expected == "multi_round_trip":
+        if (
+            "permissions" in features
+            and int(observed.get("permission_request_count") or 0) >= 2
+            and int(observed.get("permission_resolution_count") or 0) >= 2
+        ):
+            return []
+        return ["multi_round_trip"]
     if expected == "capability_gap":
         return [] if "permissions" not in features and not observed.get("permission_option_ids") else ["capability_gap"]
     if expected == "not_applicable":
@@ -255,12 +313,32 @@ def _missing(expected: list[str], observed: list[str]) -> list[str]:
     return [item for item in expected if item not in observed]
 
 
+def _missing_min_count(name: str, expected: int, observed: int) -> list[str]:
+    if expected <= 0 or observed >= expected:
+        return []
+    return [f"{name}>={expected}"]
+
+
 def _missing_ints(expected: list[int], observed: list[int]) -> list[int]:
     return [item for item in expected if item not in observed]
 
 
 def _unexpected_ints(expected: list[int], observed: list[int]) -> list[int]:
     return [item for item in observed if item not in expected]
+
+
+def _append_permission_request_options(observed: dict[str, Any], message: dict[str, Any]) -> None:
+    params = message.get("params") if isinstance(message.get("params"), dict) else {}
+    options = params.get("options") if isinstance(params.get("options"), list) else []
+    for option in options:
+        if not isinstance(option, dict):
+            observed["permission_request_missing_option_id_count"] += 1
+            continue
+        option_id = option.get("optionId") or option.get("option_id") or option.get("id")
+        if isinstance(option_id, str) and option_id:
+            _append_unique(observed["permission_request_option_ids"], option_id)
+        else:
+            observed["permission_request_missing_option_id_count"] += 1
 
 
 def _append_unique(values: list[str], value: str) -> None:

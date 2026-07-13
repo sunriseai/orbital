@@ -6,8 +6,8 @@ LOG_DIR="${ORBITAL_MANUAL_LOG_DIR:-$ROOT_DIR/tests/manual/logs}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/local_opencode_acp_permission_smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
 
-PROFILE="opencode_acp_local"
-PROFILE_LABEL="OpenCode local ACP permission"
+PROFILE="opencode_acp_local_ask"
+PROFILE_LABEL="OpenCode local ACP permission (ask config)"
 REQUIRED_COMMAND="opencode"
 TIMEOUT_SECONDS="${ORBITAL_REAL_HARNESS_TIMEOUT_SECONDS:-120}"
 FAILURES=0
@@ -44,7 +44,8 @@ run_cmd() {
 print_intro() {
   section "manual local ACP permission smoke: $PROFILE_LABEL"
   log "This script probes whether Orbital can receive, expose, approve, and record a real permission request from profile '$PROFILE'."
-  log "It asks the secondary harness to create PERMISSION_SMOKE.md via a shell command, waits for a pending permission, approves the first allow-like adapter option, and records the resulting run evidence."
+  log "This profile injects OPENCODE_CONFIG_CONTENT so OpenCode bash/edit actions are configured to ask instead of relying on prompt wording."
+  log "It asks the secondary harness to create and verify PERMISSION_SMOKE.md via two separate shell commands, approves each allow-like adapter option, and records the resulting run evidence."
   log "You should have your local OpenCode command installed and authenticated before starting this script."
   log "This may launch a real local worker and may consume local subscription or configured model capacity."
   log "Expected pass condition: at least one ACP permission request is observed, approved, and the run completes."
@@ -128,6 +129,7 @@ main() {
       ORBITAL_PERMISSION_SMOKE_WORKDIR="$SMOKE_WORKDIR" \
       ORBITAL_PERMISSION_SMOKE_PROFILE="$PROFILE" \
       ORBITAL_PERMISSION_SMOKE_TIMEOUT="$TIMEOUT_SECONDS" \
+      ORBITAL_PERMISSION_SMOKE_OBJECTIVE="Create PERMISSION_SMOKE.md by running this shell command rather than by direct file editing: echo \"OpenCode executed a shell-command permission smoke through Orbital MCP.\" > PERMISSION_SMOKE.md. Then verify it with this shell command: cat PERMISSION_SMOKE.md && ls -la PERMISSION_SMOKE.md. Run the create command and the verify command as two separate shell tool calls; do not combine them into one shell command." \
       python3 "$ROOT_DIR/tests/manual/run_permission_probe.py"
 
   cleanup_repo_artifacts

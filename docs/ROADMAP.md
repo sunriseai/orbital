@@ -75,11 +75,16 @@ Goal: make ACP conformance the main trust gate for supported secondary coding ag
 
 Primary risks addressed: adapter drift, permission ambiguity, profile mismatch, and evidence gaps caused by runtime-specific protocol behavior.
 
+Strategic decision: Phase 3 should treat diagnostic evidence as the product control for nondeterministic harness behavior. Orbital cannot make primary and secondary models fully deterministic, but it can preserve raw artifacts, normalize a diagnostic timeline, separate observations from inferences, and make warnings, capability gaps, and next-inspection pointers deterministic.
+
 Deliverables:
 
 - Normalize ACP event shapes across OpenCode, Pi, Codex, and API-backed Claude Agent SDK where available.
 - Capture text updates, tool events, permission requests, stop behavior, model selection, and usage payloads.
+- Capture a diagnostic timeline for each run covering preflight, launch, ACP initialize, session creation, prompt submission, tool activity, permission decisions, policy checks, file/check evidence, telemetry correlation, warnings, capability gaps, and terminal result.
 - Preserve complete permission approval round trips: request context, adapter option IDs, primary decision, adapter response, and post-decision run evidence.
+- Preserve bounded raw artifact references for protocol payloads, permission requests, adapter responses, stderr, token-source evidence, and final results while keeping ordinary summaries primary-safe.
+- Distinguish observed facts, inferred state, unknowns, and recommended next diagnostic reads in summaries and smoke logs.
 - Keep raw protocol payloads in debug logs, not primary-safe summaries.
 - Add adapter conformance fixtures for each supported runtime family.
 - Keep CLI compatibility only where ACP is not available or not reliable.
@@ -90,17 +95,22 @@ Deliverables:
 - Add fixture coverage for primary-mediated approval and denial so Orbital can prove the primary harness receives enough context to decide without constant manual user approval.
 - Mark each profile's support tier from fixture and smoke-run evidence.
 - Use fake ACP conformance as the local baseline, then add real-harness conformance fixtures for Codex and OpenCode before considering either profile known-good.
-- Keep real-runtime permission smoke outcomes explicit: `pass` means a permission request was observed and resolved, while `permission_capability_gap` means the harness completed without emitting an ACP permission request.
+- Keep real-runtime permission smoke outcomes explicit: `pass` means a permission request was observed and resolved, while `permission_capability_gap` means the harness completed without emitting an ACP permission request. For Codex local-subscription profiles, document that this outcome depends on the local Codex permission mode: `Ask for Approval` can exercise ACP permission routing, while `Approve for me` can approve internally before Orbital sees a request. For OpenCode, use `opencode_acp_local_ask` when the test or delegation requires bash/edit permission mediation.
+- Treat OpenCode permission configuration as the first practical harness-specific enforcement lever: use `OPENCODE_CONFIG_CONTENT` at the profile level to force `bash`/`edit` asks, preserve OpenCode's structured request context, and keep `once` as the normal approval outcome unless the primary explicitly wants session-scoped `always` behavior.
+- Validate the intended mixed-harness shape first: Codex primary supervising OpenCode secondary through Orbital MCP to ACP, with OpenCode ask-config permission mediation. Add Claude primary to this target matrix after its setup path is verified.
+- Treat same-runtime primary/secondary testing, such as Codex controlling Codex ACP, as validation coverage rather than the target product workflow. The target workflow is a high-capability primary harness delegating bounded work to smaller, cheaper, local, or specialized secondary harnesses.
 - Keep richer Git/SDLC attribution and stronger sandbox execution out of this phase unless a conformance fixture requires a narrow supporting change.
 
 Exit criteria:
 
 - Each supported ACP harness can pass a smoke run.
 - Manual local ACP smoke currently covers legacy Codex ACP and OpenCode; OpenCode smoke records OpenCode `1.17.13` and ACP `protocolVersion=1`.
+- OpenCode ask-config permission mediation is represented by a scrubbed conformance fixture that proves multiple real `session/request_permission` events and `once` resolutions through `opencode_acp_local_ask`; companion failure-mode fixtures cover rejection, missing request option IDs, and JSON-RPC permission resolution errors.
 - Official Codex ACP app-server validation is represented by the side-by-side `codex_acp_official` profile, manual wrappers, and a scrubbed conformance fixture, but it remains experimental until the fixture matrix covers all claimed capabilities.
-- Manual local ACP permission smoke reports either a full approval round trip or a clearly labeled runtime permission capability gap.
+- Manual local ACP permission smoke reports either a full approval round trip or a clearly labeled runtime permission capability gap; OpenCode permission smoke targets `opencode_acp_local_ask` so bash/edit approvals are config-forced rather than prompt-dependent.
 - Claude Agent SDK ACP exists as disabled API-backed profile metadata, but remains unverified until it passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.
+- Diagnostic output can explain what Orbital observed, what it inferred, what remains unknown, and which artifact should be inspected next.
 - Primary harnesses do not need runtime-specific ACP knowledge.
 - No runtime family is labeled `known_good_acp` without conformance fixture coverage.
 

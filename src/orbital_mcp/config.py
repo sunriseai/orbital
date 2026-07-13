@@ -8,6 +8,7 @@ from .models import HarnessConfig, HarnessProfile, ProfileClassification, Profil
 
 
 CONFIG_FILE = "orbital.config.json"
+OPENCODE_ASK_PERMISSION_CONFIG = json.dumps({"permission": {"bash": "ask", "edit": "ask"}})
 
 
 def default_profiles() -> list[HarnessProfile]:
@@ -120,6 +121,32 @@ def default_profiles() -> list[HarnessProfile]:
                 locality="subscription",
             ),
             support=ProfileSupport(tier="experimental_acp", notes=["Needs local smoke coverage before known-good support."]),
+        ),
+        HarnessProfile(
+            id="opencode_acp_local_ask",
+            display_name="OpenCode local (ask permissions)",
+            adapter="acp",
+            runtime_family="opencode",
+            command=["opencode", "acp", "--pure"],
+            auth_mode="local_subscription",
+            cost_posture="subscription_preferred",
+            capabilities=["dialogue", "permissions", "stop"],
+            classification=ProfileClassification(
+                task_tags=["implementation", "test_repair", "fast_smoke", "local_only", "permission_smoke"],
+                strengths=["local/subscription ACP tasks", "deterministic bash/edit permission mediation"],
+                limits=["model and auth depend on OpenCode configuration", "forces OpenCode bash/edit actions to ask"],
+                max_recommended_scope="small",
+                cost_preference="subscription_preferred",
+                locality="subscription",
+            ),
+            support=ProfileSupport(
+                tier="experimental_acp",
+                notes=[
+                    "Uses OPENCODE_CONFIG_CONTENT to force OpenCode bash/edit permissions to ask.",
+                    "Use this profile when the primary must mediate secondary shell or edit permissions.",
+                ],
+            ),
+            env={"OPENCODE_CONFIG_CONTENT": OPENCODE_ASK_PERMISSION_CONFIG},
         ),
         HarnessProfile(
             id="opencode_acp_glm52",

@@ -21,6 +21,7 @@ Carry forward these validated product ideas:
 - Exact-only telemetry is the right trust boundary. Correlated local agent logs should be the canonical token source; adapter payloads and external model-log telemetry should remain diagnostic unless exact correlation exists. The practical V1 focus is Codex rollout JSONL and OpenCode SQLite telemetry, with Claude local-log parsing treated as secondary until a Claude ACP setup path is verified.
 - Permission mediation is a core delegation feature. Orbital should preserve enough request context, adapter option IDs, decisions, and resulting evidence for a primary harness to make smart, safe approval decisions for secondary agents when policy allows, instead of forcing the user to approve every action manually.
 - Compatibility adapters are useful, but capability gaps must be explicit. CLI fallbacks can provide value, but they usually have weaker permissions, telemetry, follow-up dialogue, and tool-event semantics than ACP adapters.
+- Same-runtime primary/secondary validation is useful but not the target workflow. Running Codex as both the primary harness and the secondary Codex ACP worker can expose shared local runtime behavior, such as the Codex `Approve for me` setting suppressing ACP permission requests. The intended product path is a frontier or high-capability primary harness delegating bounded implementation work to smaller, cheaper, local, or specialized secondary harnesses.
 
 Rework these first-draft weaknesses:
 
@@ -41,7 +42,7 @@ Important risks:
 - Prompt over-trust: a well-crafted worker prompt improves behavior but is not an enforcement boundary. Protection: worker-safe prompt construction, allowed/forbidden path evidence, requested check evidence, deterministic warnings, and primary review ownership.
 - Evidence gaps: the worker may claim success without edits, checks, or proof. Protection: server-derived summaries, changed-file snapshots, tool timelines, check evidence, warning codes, and repair seeds from observable gaps.
 - Permission confusion: approval choices may be ambiguous, stale, or unsupported by a specific adapter. Protection: normalized permission records, explicit adapter option IDs, conservative option inference, stable permission errors, adapter outcome states, and complete decision audit trails.
-- Permission capability gaps: a real ACP harness may complete an action without emitting any ACP permission request under its current policy/configuration. Protection: fake-ACP round-trip tests prove Orbital's mediation path, while real-runtime permission smokes classify no-request completions as `permission_capability_gap` rather than as verified approval mediation.
+- Permission capability gaps: a real ACP harness may complete an action without emitting any ACP permission request under its current policy/configuration. Codex local-subscription profiles appear to inherit the local Codex permission mode, so `Approve for me` can cause a secondary Codex worker to approve internally while `Ask for Approval` can surface ACP `session/request_permission` events. OpenCode is permissive by default, but Orbital can select `opencode_acp_local_ask` to inject `OPENCODE_CONFIG_CONTENT` and force bash/edit actions into OpenCode's `ask` permission mode. Protection: fake-ACP round-trip tests prove Orbital's mediation path, while real-runtime permission smokes classify no-request completions as `permission_capability_gap` rather than as verified approval mediation.
 - Restart and storage uncertainty: active runs, pending permissions, and partial writes can become ambiguous after process interruption. Protection: append-only logs, atomic writes, schema versions, recovery diagnostics, and explicit `interrupted` or `unknown` statuses.
 - Quiet-run misclassification: a secondary harness can be alive but quiet, or dead without a clear terminal event. Protection: liveness checks using run status, latest event time, pending permission state, process state, and optional model-log activity before stopping.
 - Telemetry misattribution: token counts can be missing, double-counted, or attributed to the wrong run. Protection: exact-only telemetry, Codex/OpenCode local-log correlation by isolated workspace and time window, diagnostic-only adapter payloads, and unknowns instead of estimates.
@@ -95,7 +96,7 @@ Lower-priority risks for V1:
 
 ## Primary Users
 
-- Developers who use a high-capability primary harness and want local or cheaper secondary workers for implementation tasks.
+- Developers who use a frontier or high-capability primary harness and want local, smaller, cheaper, or specialized secondary workers for implementation tasks.
 - Tool builders who want a stable MCP surface for running multiple ACP-capable harnesses.
 - Open source contributors who want to add harness adapters or improve evidence capture without adopting a larger SDLC product.
 
