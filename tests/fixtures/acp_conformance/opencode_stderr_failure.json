@@ -1,0 +1,20 @@
+{
+  "fixture_id": "opencode_stderr_failure",
+  "profile_id": "opencode_acp_local",
+  "runtime_family": "opencode",
+  "source": "synthetic scrubbed OpenCode ACP stderr failure transcript",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "! Error: OpenCode failed before producing a terminal tool result",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"status\":\"failed\",\"text\":\"OpenCode failed\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/prompt"],
+    "result_statuses": ["failed"],
+    "normalized_features": ["stderr"],
+    "require_stderr": true,
+    "permission_behavior": "not_applicable"
+  }
+}

@@ -643,6 +643,10 @@ class TaskRunService:
             if normalize_run_status(run.get("status")) in TERMINAL_STATUSES:
                 return self.get_run_summary(run_id, max_events=max_events)
             if asyncio.get_running_loop().time() >= deadline:
+                try:
+                    await self.stop_task_run(run_id)
+                except Exception as exc:
+                    await self._append_event(run_id, RUN_ERROR, "server", f"timeout cleanup failed: {exc}")
                 summary = self.get_run_summary(run_id, max_events=max_events)
                 summary["timed_out"] = True
                 summary["warnings"] = [
@@ -785,6 +789,10 @@ class TaskRunService:
         except asyncio.CancelledError:
             if run.status != "cancelled":
                 run.status = "interrupted"
+                try:
+                    await controller.stop()
+                except Exception:
+                    pass
             raise
         except Exception as exc:
             if run.status != "cancelled":

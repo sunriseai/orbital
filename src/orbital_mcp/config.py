@@ -9,6 +9,8 @@ from .models import HarnessConfig, HarnessProfile, ProfileClassification, Profil
 
 CONFIG_FILE = "orbital.config.json"
 OPENCODE_ASK_PERMISSION_CONFIG = json.dumps({"permission": {"bash": "ask", "edit": "ask"}})
+OPENCODE_GLM52_MODEL = "opencode/glm-5.2"
+OPENCODE_BIG_PICKLE_MODEL = "opencode/big-pickle"
 
 
 def default_profiles() -> list[HarnessProfile]:
@@ -166,7 +168,73 @@ def default_profiles() -> list[HarnessProfile]:
                 locality="metered_api",
             ),
             support=ProfileSupport(tier="experimental_acp", notes=["Metered profile is never selected implicitly."]),
-            env={"ORBITAL_ACP_MODEL": "opencode/glm-5.2"},
+            env={"ORBITAL_ACP_MODEL": OPENCODE_GLM52_MODEL},
+        ),
+        HarnessProfile(
+            id="opencode_acp_glm52_ask",
+            display_name="OpenCode GLM-5.2 (ask permissions)",
+            adapter="acp",
+            runtime_family="opencode",
+            command=["opencode", "acp", "--pure"],
+            auth_mode="api_key",
+            cost_posture="metered_api",
+            capabilities=["dialogue", "permissions", "stop"],
+            classification=ProfileClassification(
+                task_tags=["implementation", "test_repair", "fast_smoke", "permission_smoke"],
+                strengths=["explicit metered OpenCode ACP profile", "deterministic bash/edit permission mediation"],
+                limits=["metered API use requires explicit primary opt-in", "forces OpenCode bash/edit actions to ask"],
+                max_recommended_scope="small",
+                cost_preference="metered_api",
+                locality="metered_api",
+            ),
+            support=ProfileSupport(
+                tier="experimental_acp",
+                notes=[
+                    "Pins OpenCode Zen model opencode/glm-5.2 through session/set_model.",
+                    "Uses OPENCODE_CONFIG_CONTENT to force OpenCode bash/edit permissions to ask.",
+                    "Metered profile is never selected implicitly.",
+                ],
+            ),
+            env={
+                "ORBITAL_ACP_MODEL": OPENCODE_GLM52_MODEL,
+                "OPENCODE_CONFIG_CONTENT": OPENCODE_ASK_PERMISSION_CONFIG,
+            },
+        ),
+        HarnessProfile(
+            id="opencode_acp_big_pickle_ask",
+            display_name="OpenCode Big Pickle (ask permissions)",
+            adapter="acp",
+            runtime_family="opencode",
+            command=["opencode", "acp", "--pure"],
+            auth_mode="api_key",
+            cost_posture="metered_api",
+            capabilities=["dialogue", "permissions", "stop"],
+            classification=ProfileClassification(
+                task_tags=["implementation", "test_repair", "fast_smoke", "permission_smoke", "cheap_smoke"],
+                strengths=["free OpenCode Zen model during availability window", "deterministic bash/edit permission mediation"],
+                limits=[
+                    "metered/API-backed profile requires explicit primary opt-in",
+                    "Big Pickle is free for a limited time according to OpenCode Zen pricing",
+                    "free-period data may be used to improve the model",
+                    "forces OpenCode bash/edit actions to ask",
+                ],
+                max_recommended_scope="small",
+                cost_preference="free_or_low_cost",
+                locality="metered_api",
+            ),
+            support=ProfileSupport(
+                tier="experimental_acp",
+                notes=[
+                    "Pins OpenCode Zen model opencode/big-pickle through session/set_model.",
+                    "Big Pickle is documented by OpenCode Zen as free for a limited time.",
+                    "Uses OPENCODE_CONFIG_CONTENT to force OpenCode bash/edit permissions to ask.",
+                    "Never selected implicitly.",
+                ],
+            ),
+            env={
+                "ORBITAL_ACP_MODEL": OPENCODE_BIG_PICKLE_MODEL,
+                "OPENCODE_CONFIG_CONTENT": OPENCODE_ASK_PERMISSION_CONFIG,
+            },
         ),
         HarnessProfile(
             id="codex_api",

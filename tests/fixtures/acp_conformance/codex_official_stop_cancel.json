@@ -1,0 +1,20 @@
+{
+  "fixture_id": "codex_official_stop_cancel",
+  "profile_id": "codex_acp_official",
+  "runtime_family": "codex",
+  "source": "synthetic scrubbed official Codex ACP cooperative cancel transcript",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<CODEX_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"session/cancel\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\"}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"status\":\"cancelled\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/cancel"],
+    "result_statuses": ["cancelled"],
+    "normalized_features": ["stop_or_cancel"],
+    "permission_behavior": "not_applicable"
+  }
+}

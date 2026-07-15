@@ -1,0 +1,34 @@
+{
+  "fixture_id": "opencode_permission_mixed_allow_deny",
+  "profile_id": "opencode_acp_local_ask",
+  "runtime_family": "opencode",
+  "source": "synthetic scrubbed OpenCode ACP transcript with mixed allow and deny permission resolutions",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<OPENCODE_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-1\",\"title\":\"bash\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"cwd\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"toolCall\":{\"toolCallId\":\"tool-1\",\"title\":\"echo allowed\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{\"command\":\"echo allowed\"}},\"options\":[{\"optionId\":\"once\",\"kind\":\"allow_once\",\"name\":\"Allow once\"},{\"optionId\":\"reject\",\"kind\":\"reject_once\",\"name\":\"Reject\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"once\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"tool-1\",\"status\":\"completed\",\"title\":\"echo allowed\",\"rawOutput\":{\"metadata\":{\"exit\":0}}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-2\",\"title\":\"bash\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"cwd\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"toolCall\":{\"toolCallId\":\"tool-2\",\"title\":\"rm -rf build\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{\"command\":\"rm -rf build\"}},\"options\":[{\"optionId\":\"once\",\"kind\":\"allow_once\",\"name\":\"Allow once\"},{\"optionId\":\"reject\",\"kind\":\"reject_once\",\"name\":\"Reject\"}]}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"reject\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"msg-1\",\"content\":{\"type\":\"text\",\"text\":\"Denied destructive command.\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":88,\"outputTokens\":20,\"totalTokens\":108},\"_meta\":{}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update", "session/request_permission"],
+    "session_updates": ["tool_call", "tool_call_update", "agent_message_chunk"],
+    "normalized_features": ["dialogue", "tools", "permissions"],
+    "permission_behavior": "multi_round_trip",
+    "permission_option_ids": ["once", "reject"],
+    "permission_request_option_ids": ["once", "reject"],
+    "min_permission_request_count": 2,
+    "min_permission_resolution_count": 2,
+    "require_usage_payload": true
+  }
+}

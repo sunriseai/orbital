@@ -116,6 +116,29 @@ class FakeAcpValidationTests(unittest.TestCase):
         finally:
             remove_tree(tmp)
 
+    def test_run_task_and_wait_timeout_stops_active_worker(self) -> None:
+        tmp = ROOT / ".tmp-test-validation-timeout-stop"
+        try:
+            tmp.mkdir(exist_ok=True)
+            service = fake_acp_service(tmp)
+
+            summary = run_async(
+                service.run_task_and_wait(
+                    tmp,
+                    task("Create fake_output.txt. SLEEP", allowed_paths=["fake_output.txt"]),
+                    profile_id="fake_acp",
+                    timeout_seconds=0.2,
+                    poll_interval_ms=25,
+                )
+            )
+
+            self.assertTrue(summary["timed_out"])
+            self.assertEqual(summary["status"], "cancelled")
+            self.assertIn("Run did not reach a terminal status within 0.2 seconds", summary["warnings"])
+            self.assertNotIn(summary["run_id"], service._controllers)
+        finally:
+            remove_tree(tmp)
+
     def test_stubborn_fake_worker_records_forced_kill_stop_evidence(self) -> None:
         tmp = ROOT / ".tmp-test-validation-kill-stop"
         try:

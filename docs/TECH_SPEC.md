@@ -202,6 +202,8 @@ Current local smoke evidence:
 - `codex_acp_official`: experimental side-by-side profile for the maintained `@agentclientprotocol/codex-acp` app-server adapter. It runs through `npx -y @agentclientprotocol/codex-acp` with `INITIAL_AGENT_MODE=read-only`. Permission behavior is runtime-config-dependent: with local Codex set to `Ask for Approval`, the official adapter can emit ACP `session/request_permission` events that Orbital observes and resolves; with `Approve for me`, the secondary Codex runtime can approve internally and complete without an ACP permission event.
 - `opencode_acp_local`: manual local ACP smoke passed through `opencode acp --pure`; preflight recorded OpenCode `1.17.13` and ACP `protocolVersion=1`.
 - `opencode_acp_local_ask`: same OpenCode ACP path with `OPENCODE_CONFIG_CONTENT` setting `permission.bash=ask` and `permission.edit=ask`; use it for primary-mediated OpenCode permission tests and delegations.
+- `opencode_acp_glm52_ask`: explicit OpenCode Zen `opencode/glm-5.2` profile with the same ask-permission config; it is API-backed, metered, experimental, and never selected implicitly.
+- `opencode_acp_big_pickle_ask`: explicit OpenCode Zen `opencode/big-pickle` profile with the same ask-permission config; OpenCode Zen currently documents Big Pickle as free for a limited time and notes a free-period data-use caveat, so Orbital should use it only through explicit profile selection for non-sensitive smoke or bounded secondary work.
 - `claude_code_cli_local`: local/subscription Claude path is CLI fallback through `claude`, not ACP.
 - `claude_agent_acp_api`: disabled API-backed ACP profile via `claude-agent-acp`; explicit setup is required and it is not smoke-verified yet.
 
@@ -211,9 +213,16 @@ Current conformance fixture evidence:
 
 - `fake_acp`: fixture replay covers core ACP flow, complete permission approval round trip, malformed JSON-RPC, unknown event shapes, stderr-only failure, cooperative cancel, and partial terminal result behavior.
 - `codex_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, dialogue, tools, usage updates, and terminal result; permissions are currently represented as a capability gap.
-- `codex_acp_official`: scrubbed fixture replay covers the app-server adapter's permission-capability-gap run, tool/guardian events, model metadata, adapter usage payloads, and terminal result.
-- `opencode_acp_local`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, edit tool events, dialogue, adapter usage payloads, and terminal result; permissions are represented as a capability gap for the default/user-configured profile.
-- `opencode_acp_local_ask`: scrubbed fixture replay covers initialize, session creation, prompt submission, available commands, execute tool events, two ACP `session/request_permission` events, explicit `once`/`always`/`reject` option IDs, two `once` resolutions, adapter usage payloads, and terminal result. Synthetic failure fixtures additionally cover a rejected permission, missing request option IDs, and a JSON-RPC permission resolution error so Orbital can distinguish mediated denial, malformed request context, and adapter/protocol failure.
+- `codex_acp_official`: scrubbed and synthetic fixture replay covers the app-server adapter's permission-capability-gap run, tool/guardian events, model metadata, adapter usage payloads, terminal result, stop/cancel, stderr/guardian failure, malformed payload handling, and unknown payload preservation.
+- `opencode_acp_local`: scrubbed and synthetic fixture replay covers initialize, session creation, prompt submission, available commands, edit tool events, dialogue, adapter usage payloads, terminal result, stop/cancel, stderr failure, and partial terminal result behavior; permissions are represented as a capability gap for the default/user-configured profile.
+- `opencode_acp_local_ask`: scrubbed and synthetic fixture replay covers initialize, session creation, prompt submission, available commands, execute tool events, two ACP `session/request_permission` events, explicit `once`/`always`/`reject` option IDs, multiple `once` resolutions, adapter usage payloads, and terminal result. Failure fixtures additionally cover a rejected permission, missing request option IDs, a JSON-RPC permission resolution error, ambiguous permission options, and mixed allow/deny multi-request outcomes so Orbital can distinguish mediated denial, malformed request context, adapter/protocol failure, and unsupported resolution paths.
+
+Conformance reports expose two layers:
+
+- `capabilities`: backward-compatible boolean feature flags for broad tests and support-tier gates.
+- `feature_states`: a feature-state matrix whose values are `observed`, `missing`, `not_applicable`, or `capability_gap`.
+
+The feature-state matrix covers initialize, session creation, prompt submission, dialogue, tools, permissions, permission resolution, stop/cancel, stderr, model metadata, adapter usage payloads, canonical local-log telemetry, malformed payload handling, and terminal result shape. Canonical local-log telemetry is `not_applicable` for ACP transcript replay because it is validated by separate token probes. Capability gaps and unknown or malformed payloads must preserve bounded `raw_refs` so a primary or developer can inspect the transcript line without exposing raw payloads in primary-safe summaries.
 
 Smoke evidence and narrow conformance fixtures are necessary but not sufficient for `known_good_acp`. A profile remains `experimental_acp` until adapter conformance fixtures cover initialization, prompt submission, event normalization, permissions, stop/cancel behavior, stderr, and telemetry expectations.
 

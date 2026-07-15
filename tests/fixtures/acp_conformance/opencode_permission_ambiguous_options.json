@@ -1,0 +1,28 @@
+{
+  "fixture_id": "opencode_permission_ambiguous_options",
+  "profile_id": "opencode_acp_local_ask",
+  "runtime_family": "opencode",
+  "source": "synthetic scrubbed OpenCode ACP permission transcript with ambiguous allow options",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<OPENCODE_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"tool-1\",\"title\":\"bash\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[{\"path\":\"<WORKDIR>\"}],\"rawInput\":{\"cwd\":\"<WORKDIR>\"}}}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"session/request_permission\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"toolCall\":{\"toolCallId\":\"tool-1\",\"title\":\"echo ambiguous\",\"kind\":\"execute\",\"status\":\"pending\",\"locations\":[],\"rawInput\":{\"command\":\"echo ambiguous\"}},\"options\":[{\"optionId\":\"once\",\"kind\":\"allow_once\",\"name\":\"Allow once\"},{\"optionId\":\"always\",\"kind\":\"allow_always\",\"name\":\"Always allow\"},{\"optionId\":\"reject\",\"kind\":\"reject_once\",\"name\":\"Reject\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":42,\"outputTokens\":9,\"totalTokens\":51},\"_meta\":{}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update", "session/request_permission"],
+    "session_updates": ["tool_call"],
+    "normalized_features": ["tools", "permissions"],
+    "permission_request_option_ids": ["once", "always", "reject"],
+    "min_permission_request_count": 1,
+    "require_usage_payload": true,
+    "feature_states": {
+      "permission_resolution": "capability_gap"
+    }
+  }
+}

@@ -27,11 +27,27 @@ from orbital_mcp.config import load_config  # noqa: E402
 
 FIXTURE_DIR = ROOT / "tests" / "fixtures" / "acp_conformance"
 REAL_PROFILE_FIXTURES = [
-    "codex_legacy_smoke.json",
-    "codex_official_permission_gap.json",
-    "opencode_ask_permission_round_trip.json",
-    "opencode_smoke.json",
+    path.name
+    for path in sorted(FIXTURE_DIR.glob("*.json"))
+    if not path.name.startswith("fake_")
 ]
+
+FEATURE_STATE_KEYS = {
+    "initialize",
+    "session_creation",
+    "prompt_submission",
+    "dialogue",
+    "tools",
+    "permissions",
+    "permission_resolution",
+    "stop_cancel",
+    "stderr",
+    "model_metadata",
+    "adapter_usage_payload",
+    "canonical_local_log_telemetry",
+    "malformed_payload_handling",
+    "terminal_result_shape",
+}
 
 
 class AcpAdapterConformanceFixtureTests(unittest.TestCase):
@@ -118,6 +134,36 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 "adapter_usage_payload": True,
                 "model_metadata": True,
             },
+            "codex_official_malformed_unknown": {
+                "dialogue": False,
+                "tools": False,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": True,
+                "unknown_payloads": True,
+                "malformed_payloads": True,
+            },
+            "codex_official_stderr_guardian_failure": {
+                "dialogue": False,
+                "tools": True,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": True,
+                "stderr": True,
+                "terminal_result": True,
+            },
+            "codex_official_stop_cancel": {
+                "dialogue": False,
+                "tools": False,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": False,
+                "model_metadata": False,
+                "stop_or_cancel": True,
+                "terminal_result": True,
+            },
             "opencode_smoke": {
                 "dialogue": True,
                 "tools": True,
@@ -136,6 +182,24 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 "adapter_usage_payload": True,
                 "model_metadata": False,
             },
+            "opencode_partial_result": {
+                "dialogue": False,
+                "tools": False,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": False,
+                "model_metadata": False,
+                "terminal_result": False,
+            },
+            "opencode_permission_ambiguous_options": {
+                "dialogue": False,
+                "tools": True,
+                "permissions": True,
+                "permission_round_trip": False,
+                "multi_permission_round_trip": False,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
+            },
             "opencode_permission_denied": {
                 "dialogue": True,
                 "tools": True,
@@ -145,6 +209,15 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 "adapter_usage_payload": True,
                 "model_metadata": False,
                 "jsonrpc_errors": False,
+            },
+            "opencode_permission_mixed_allow_deny": {
+                "dialogue": True,
+                "tools": True,
+                "permissions": True,
+                "permission_round_trip": True,
+                "multi_permission_round_trip": True,
+                "adapter_usage_payload": True,
+                "model_metadata": False,
             },
             "opencode_permission_jsonrpc_error": {
                 "dialogue": False,
@@ -166,6 +239,26 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 "model_metadata": False,
                 "jsonrpc_errors": False,
             },
+            "opencode_stderr_failure": {
+                "dialogue": False,
+                "tools": False,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": False,
+                "model_metadata": False,
+                "stderr": True,
+                "terminal_result": True,
+            },
+            "opencode_stop_cancel": {
+                "dialogue": False,
+                "tools": False,
+                "permissions": False,
+                "permission_round_trip": False,
+                "adapter_usage_payload": False,
+                "model_metadata": False,
+                "stop_or_cancel": True,
+                "terminal_result": True,
+            },
         }
 
         for path in sorted(FIXTURE_DIR.glob("*.json")):
@@ -175,6 +268,10 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
                 expected = expected_capabilities[report["fixture_id"]]
                 for capability, value in expected.items():
                     self.assertEqual(report["capabilities"][capability], value, report)
+                self.assertEqual(set(report["feature_states"]), FEATURE_STATE_KEYS)
+                self.assertTrue(
+                    set(report["feature_states"].values()) <= {"observed", "missing", "not_applicable", "capability_gap"}
+                )
 
     def test_real_profiles_remain_experimental_until_fixture_promotion_gate_changes(self) -> None:
         profiles = {profile.id: profile for profile in load_config(ROOT).profiles}
@@ -236,6 +333,64 @@ class AcpAdapterConformanceFixtureTests(unittest.TestCase):
         self.assertEqual(report["observed"]["jsonrpc_error_count"], 1)
         self.assertIn("jsonrpc_error", report["observed"]["normalized_features"])
         self.assertTrue(report["capabilities"]["jsonrpc_errors"])
+
+    def test_feature_state_matrix_classifies_observed_missing_not_applicable_and_gaps(self) -> None:
+        report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_permission_ambiguous_options.json")
+
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(report["feature_states"]["initialize"], "observed")
+        self.assertEqual(report["feature_states"]["permissions"], "observed")
+        self.assertEqual(report["feature_states"]["permission_resolution"], "capability_gap")
+        self.assertEqual(report["feature_states"]["canonical_local_log_telemetry"], "not_applicable")
+        self.assertEqual(report["feature_states"]["stderr"], "missing")
+        self.assertEqual(
+            report["raw_refs"]["capability_gaps"],
+            [{"feature": "permission_resolution", "ref": "feature_states.permission_resolution"}],
+        )
+
+    def test_raw_refs_preserve_unknown_malformed_and_stderr_locations(self) -> None:
+        codex_report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "codex_official_malformed_unknown.json")
+        stderr_report = evaluate_acp_conformance_fixture(FIXTURE_DIR / "codex_official_stderr_guardian_failure.json")
+
+        self.assertTrue(codex_report["ok"], codex_report)
+        self.assertEqual(codex_report["feature_states"]["malformed_payload_handling"], "observed")
+        self.assertEqual([item["line"] for item in codex_report["raw_refs"]["malformed_payloads"]], [5])
+        self.assertEqual(
+            {(item.get("method"), item.get("session_update")) for item in codex_report["raw_refs"]["unknown_payloads"]},
+            {("codex/guardian", None), ("session/update", "guardian_status_update")},
+        )
+        self.assertEqual(codex_report["feature_states"]["permissions"], "capability_gap")
+        self.assertTrue(codex_report["raw_refs"]["capability_gaps"])
+
+        self.assertTrue(stderr_report["ok"], stderr_report)
+        self.assertEqual(stderr_report["feature_states"]["stderr"], "observed")
+        self.assertEqual(stderr_report["raw_refs"]["stderr"], [{"line": 8, "direction": "!", "kind": "stderr"}])
+
+    def test_new_opencode_and_codex_fixture_families_are_covered(self) -> None:
+        required = {
+            "opencode_permission_ambiguous_options",
+            "opencode_permission_mixed_allow_deny",
+            "opencode_stop_cancel",
+            "opencode_stderr_failure",
+            "opencode_partial_result",
+            "codex_official_malformed_unknown",
+            "codex_official_stop_cancel",
+            "codex_official_stderr_guardian_failure",
+        }
+        observed = {
+            evaluate_acp_conformance_fixture(path)["fixture_id"]
+            for path in sorted(FIXTURE_DIR.glob("*.json"))
+        }
+
+        self.assertTrue(required <= observed)
+
+        mixed = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_permission_mixed_allow_deny.json")
+        self.assertEqual(mixed["observed"]["permission_option_ids"], ["once", "reject"])
+        self.assertTrue(mixed["capabilities"]["multi_permission_round_trip"])
+        self.assertEqual(mixed["feature_states"]["permission_resolution"], "observed")
+
+        partial = evaluate_acp_conformance_fixture(FIXTURE_DIR / "opencode_partial_result.json")
+        self.assertEqual(partial["feature_states"]["terminal_result_shape"], "capability_gap")
 
     def test_conformance_report_lists_missing_expected_features(self) -> None:
         transcript = '> {"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'

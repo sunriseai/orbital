@@ -64,6 +64,29 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertEqual(opencode_config["permission"]["edit"], "ask")
         self.assertIn("permission_smoke", profile.classification.task_tags)
 
+    def test_default_profiles_include_explicit_opencode_model_ask_variants(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+
+        glm = next(item for item in config.profiles if item.id == "opencode_acp_glm52_ask")
+        big_pickle = next(item for item in config.profiles if item.id == "opencode_acp_big_pickle_ask")
+
+        for profile in [glm, big_pickle]:
+            opencode_config = json.loads(profile.env["OPENCODE_CONFIG_CONTENT"])
+            self.assertEqual(profile.command, ["opencode", "acp", "--pure"])
+            self.assertEqual(profile.runtime_family, "opencode")
+            self.assertEqual(profile.auth_mode, "api_key")
+            self.assertEqual(profile.cost_posture, "metered_api")
+            self.assertEqual(profile.support.tier, "experimental_acp")
+            self.assertTrue(profile.metered_api)
+            self.assertEqual(opencode_config["permission"]["bash"], "ask")
+            self.assertEqual(opencode_config["permission"]["edit"], "ask")
+            self.assertIn("permission_smoke", profile.classification.task_tags)
+
+        self.assertEqual(glm.env["ORBITAL_ACP_MODEL"], "opencode/glm-5.2")
+        self.assertEqual(big_pickle.env["ORBITAL_ACP_MODEL"], "opencode/big-pickle")
+        self.assertIn("cheap_smoke", big_pickle.classification.task_tags)
+        self.assertIn("Never selected implicitly.", big_pickle.support.notes)
+
     def test_default_profiles_separate_claude_cli_from_api_backed_agent_acp(self) -> None:
         config = load_config(Path("/tmp/orbital-config-does-not-exist"))
         profile_ids = {item.id for item in config.profiles}

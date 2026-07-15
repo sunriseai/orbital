@@ -19,9 +19,11 @@ Implemented and currently validated:
 - Canonical token telemetry is implemented for the practical V1 targets: Codex rollout JSONL under `~/.codex/sessions/**/rollout-*.jsonl` and OpenCode SQLite under `~/.local/share/opencode/opencode.db`. Manual Codex and OpenCode token probes use isolated token workspaces and require exactly one correlated external agent-log record.
 - Initial evidence-gap controls are implemented in primary-safe run outputs: `evidence_status`, `evidence_score`, grouped `evidence_groups`, stable requested-check warning names, and `worker_claim_without_evidence` for prose-only completions.
 - Initial ACP conformance foundations are implemented: transcript parsing, expectation-based conformance reports, fixture replay, fake ACP conformance checks, fake failure fixtures for malformed/unknown/stderr/stop/partial-result behavior, scrubbed Codex/OpenCode transcript excerpts, OpenCode ask-config multi-permission round-trip coverage, OpenCode permission failure-mode fixtures, capability matrix assertions, and deterministic missing-feature reporting.
+- ACP conformance reports now expose both backward-compatible boolean `capabilities` and a `feature_states` matrix with `observed`, `missing`, `not_applicable`, and `capability_gap` values. Bounded `raw_refs` preserve malformed payload, unknown payload, stderr, and capability-gap locations for debug inspection.
+- The Phase 3 conformance matrix now includes synthetic/scrubbed coverage for OpenCode ambiguous permission options, mixed allow/deny multi-request permissions, stop/cancel, stderr failure, partial terminal result behavior, and official Codex stop/cancel, stderr/guardian failure, malformed/unknown payload handling, permission capability gaps, model metadata, usage payloads, and terminal result shape.
 - Initial diagnostic evidence fields are implemented on run summaries and status digests: `diagnostic_timeline`, `diagnostic_explainability`, compact diagnostic counts, top next step, and primary-safe artifact references derived from existing `.orbital/` artifacts.
 - Codex ACP permission routing is documented as local-runtime-config-dependent: `Ask for Approval` can emit ACP permission requests for Orbital to mediate, while `Approve for me` can let the secondary Codex runtime approve internally and complete with `permission_capability_gap`.
-- OpenCode ACP permission routing has a deterministic config lever: `opencode_acp_local_ask` injects `OPENCODE_CONFIG_CONTENT` with `permission.bash=ask` and `permission.edit=ask` so bash/edit permission mediation is not prompt-dependent. Its scrubbed conformance fixture proves a real multi-request `session/request_permission` round trip with `once` approvals, and synthetic failure fixtures lock down denial, missing option IDs, and JSON-RPC resolution-error detection.
+- OpenCode ACP permission routing has a deterministic config lever: `opencode_acp_local_ask` injects `OPENCODE_CONFIG_CONTENT` with `permission.bash=ask` and `permission.edit=ask` so bash/edit permission mediation is not prompt-dependent. Explicit OpenCode Zen ask profiles now combine that permission behavior with pinned models, including `opencode_acp_big_pickle_ask` for `opencode/big-pickle` free-model smoke validation and `opencode_acp_glm52_ask` for stronger metered validation. Its scrubbed conformance fixture proves a real multi-request `session/request_permission` round trip with `once` approvals, and synthetic failure fixtures lock down denial, missing option IDs, and JSON-RPC resolution-error detection.
 - Codex-as-primary controlling Codex-as-secondary is useful validation coverage, but it is not the targeted product workflow. The practical product goal remains a high-capability primary harness delegating bounded work to smaller, cheaper, local, or specialized secondary harnesses.
 - The Prism / Orbital / `ngitd-core` boundary is now explicit: Prism coordinates the broader workflow, Orbital owns agent-run diagnostics and attachable run artifacts, and `ngitd-core` owns repo snapshots, captured changes, durable evidence artifacts, annotations, terminal dispositions, and lineage.
 - No real local Claude ACP subscription path has been verified. Claude ACP planning remains API-backed through the Claude Agent SDK until proven otherwise.
@@ -32,7 +34,7 @@ Current engineering focus:
 - Treat diagnostic evidence as the next product control: Orbital cannot make primary or secondary harnesses deterministic, but it can make observations, raw artifacts, normalized timelines, warnings, capability gaps, and next-inspection pointers deterministic enough to diagnose what happened.
 - Broaden the explicit adapter conformance fixture matrix for Codex and OpenCode before expanding it to Pi or Claude Agent SDK ACP.
 - Apply the matrix first to smoke-verified local Codex ACP, official Codex ACP, and OpenCode ACP, because fuller real ACP conformance is the next support-tier gate.
-- Prefer validation that exercises the intended mixed-harness delegation shape over scenarios that only prove a frontier harness can call another instance of itself. The near-term target matrix is Codex and, once verified, Claude as primary harnesses supervising OpenCode through `opencode_acp_local_ask` as the secondary harness.
+- Prefer validation that exercises the intended mixed-harness delegation shape over scenarios that only prove a frontier harness can call another instance of itself. The near-term target matrix is Codex and, once verified, Claude as primary harnesses supervising OpenCode through `opencode_acp_local_ask` or an explicit pinned-model ask profile such as `opencode_acp_big_pickle_ask` as the secondary harness.
 - Keep direct `../ngitd-core` integration, richer SDLC/git attribution, and containerized sandbox enforcement as later Prism or platform layers unless an adapter-conformance task exposes a narrow prerequisite.
 - Keep the TODO below as the remaining implementation, hardening, and promotion backlog. Items that are already partially implemented should be treated as "finish, broaden, or lock down" work, not as absence of any code.
 
@@ -49,11 +51,76 @@ Risk-ranked hardening priorities:
 
 Lower-priority for V1: perfect cross-provider cost accounting, full Claude ACP parity, hard sandbox enforcement, hosted service, SDLC workflows, and richer git attribution.
 
-Next-phase diagnostic decision:
+Current diagnostic decision:
 
 - Orbital should be the system of record around nondeterministic harness behavior. It should preserve raw debug artifacts, normalize a concise diagnostic timeline, distinguish observation from inference, and point the operator to the exact artifact to inspect next when confidence is limited.
 - Guardrail tests should stay narrow and product-critical: Codex primary now, Claude primary after setup verification, and OpenCode secondary through the ask-config ACP profile. Broader runtime coverage should follow only after this target path is diagnosable.
 - Orbital's current integration posture with `ngitd-core` is `artifact_contract_only`: no `.ngit/` writes, no `ngit` subprocess calls, and no runtime dependency. Prism should later decide when Orbital artifacts become `ngitd-core` evidence or annotations.
+- Matt Pocock's `/grill-with-docs` pattern is a Prism design issue, not an Orbital core feature. The durable version should be a Prism-owned context-grilling workflow that inspects repo code/docs, interviews the engineer one question at a time, and proposes `CONTEXT.md` glossary updates plus high-value ADRs before implementation. Orbital should later consume approved planning artifacts as bounded worker context, but it should not own the interview state machine, glossary, or ADR generation.
+
+## Next Workplan: Phase 3 ACP Conformance Matrix
+
+Goal:
+
+- Broaden the replayable Codex/OpenCode ACP evidence matrix so adapter drift, permission ambiguity, and runtime-specific capability gaps are visible before any support-tier promotion.
+- Keep the work inside Orbital's current product boundary: no direct `ngitd-core` integration, no sandbox claims, no SDLC workflow expansion, and no `known_good_acp` promotion.
+
+Scope:
+
+- Target runtimes: `opencode_acp_local`, `opencode_acp_local_ask`, `codex_acp_local`, and `codex_acp_official`.
+- Target product path: a high-capability primary harness supervising OpenCode secondary through `opencode_acp_local_ask`.
+- Non-target for this slice: Claude Agent ACP smoke, Pi adapter work, Prism artifact export, richer repo lineage, and sandbox enforcement.
+
+Implemented baseline:
+
+- ACP conformance reports list observed support for initialize, session creation, prompt submission, dialogue, tools, permissions, permission resolution, stop/cancel, stderr, model metadata, adapter usage payloads, canonical local-log telemetry applicability, malformed payload handling, and terminal result shape.
+- Conformance reports explicitly distinguish `observed`, `missing`, `not_applicable`, and `capability_gap` feature states instead of collapsing all absent behavior into missing support.
+- OpenCode fixtures cover stop/cancel behavior, stderr failure, partial terminal result, ambiguous permission options, and mixed allow/deny multi-request permission outcomes.
+- Official Codex ACP fixtures cover stop/cancel behavior, stderr/guardian failure output, malformed/unknown payloads, permission capability gap behavior, model metadata, adapter usage payloads, and terminal result shape.
+- Dropped, downgraded, unknown, malformed, stderr, and capability-gap cases preserve bounded raw transcript references for debug inspection.
+
+Remaining implementation tasks:
+
+- [ ] Add or broaden legacy Codex ACP fixtures only where they clarify compatibility behavior that differs from the official app-server adapter.
+- [ ] Keep profile support tiers unchanged unless the fixture and smoke promotion gate is intentionally revisited in a separate decision.
+
+Documentation tasks:
+
+- [ ] Update `README.md` manual smoke/conformance notes only if operator-facing review steps or script outputs change.
+
+Implemented automated tests:
+
+- `tests/test_validation_acp_conformance.py` covers feature-state reporting, new fixture families, raw-ref preservation, support-tier no-promotion behavior, and runtime-specific capability-gap classification.
+
+Remaining automated tests:
+
+- [ ] Extend `tests/test_validation_fake_acp.py` only when a real-runtime fixture exposes a generic ACP shape that fake ACP should model.
+- [ ] Extend `tests/test_orbital_core.py` if profile metadata, support-tier caveats, or primary-safe summary fields change.
+- [ ] Continue extending `tests/test_docs_todo.py` when new docs language is added, so docs preserve the conformance matrix terms and reject accidental `known_good_acp` promotion.
+
+Manual tests:
+
+- [ ] Run `tests/manual/run_manual_local_opencode_acp_permission_smoke.sh` with `opencode_acp_local_ask` and confirm the result is `pass`, not `permission_capability_gap`, when OpenCode ask-config is active.
+- [ ] Run `tests/manual/run_manual_official_codex_acp_smoke.sh` when the official adapter is available; classify any missing permission request as `permission_capability_gap`, not Orbital mediation success.
+- [ ] Run `tests/manual/run_manual_official_codex_acp_permission_smoke.sh` only when local Codex is intentionally set to `Ask for Approval`; record whether the runtime emits ACP permission requests.
+- [ ] Review each manual log for diagnostic anchors: selected profile, ACP initialize details, permission mode/config, request option IDs, selected decisions, terminal status, token correlation result, warnings, and capability gaps.
+
+Validation commands:
+
+- [ ] `python3 -m pytest -q tests/test_validation_acp_conformance.py`
+- [ ] `python3 -m pytest -q tests/test_validation_fake_acp.py`
+- [ ] `python3 -m pytest -q tests/test_orbital_core.py`
+- [ ] `python3 -m pytest -q tests/test_docs_todo.py`
+- [ ] `python3 -m pytest -q`
+- [ ] `git diff --check`
+
+Exit criteria:
+
+- The conformance report gives a primary harness a clear, runtime-specific view of what ACP behavior was observed, what is missing, what is not applicable, and what is a known capability gap.
+- OpenCode ask-config permission behavior has replay coverage for happy path, denial, malformed/missing options, JSON-RPC resolution failure, ambiguous options, and mixed multi-request outcomes.
+- Official Codex ACP remains experimental but has clearer fixture-backed evidence for its current app-server behavior and gaps.
+- No profile is promoted to `known_good_acp`.
+- Docs and tests agree that this slice hardens the support-tier gate; it does not widen Orbital into Prism, `ngitd-core`, SDLC, or sandbox responsibilities.
 
 ## Risk Workplans
 
@@ -96,10 +163,15 @@ Current Baseline:
 
 Workplan:
 
-- [ ] Define a canonical diagnostic timeline with events for preflight, launch, ACP initialize, session creation, prompt submission, tool start/update/end, permission request/resolution, policy decisions, file/check evidence, telemetry correlation, warnings, capability gaps, terminal result, and raw artifact references.
-- [ ] Add summary fields that separate `observed`, `inferred`, `unknown`, and `diagnostic_next_steps` so primary harnesses do not confuse evidence with interpretation.
-- [ ] Ensure every warning and capability gap points to the raw artifact or normalized event that caused it when such an artifact exists.
-- [ ] Preserve bounded raw protocol payload references for permission requests, adapter responses, tool calls, final result payloads, stderr, and token-source correlation without exposing them in primary-safe summaries by default.
+Implemented baseline:
+
+- Derived run summaries now include a canonical diagnostic timeline for launch, prompt, dialogue, tool, permission, check, telemetry, warning, terminal, and fallback event phases.
+- Summary explainability now separates `observed`, `inferred`, `unknown`, and `diagnostic_next_steps` so primary harnesses do not confuse evidence with interpretation.
+- Warning, capability-gap, permission, transcript, final-report, and token-source diagnostics now point to primary-safe artifact references where Orbital has such an artifact.
+- Status digests now expose compact diagnostic counts and top next step without raw events or raw adapter payloads.
+
+Remaining work:
+
 - [ ] Broaden diagnostic timeline phases to include ACP initialize and session creation when adapters expose those as normalized events.
 - [ ] Add Prism-facing artifact export packaging once Prism defines the attachment contract for `ngitd-core` evidence and annotations.
 - [ ] Extend manual smoke review logs to assert the presence of diagnostic anchors: selected profile/config, ACP initialize details, permission mode/config, request option IDs, selected decisions, terminal status, token correlation result, warnings, and capability gaps.
@@ -116,26 +188,35 @@ Problem:
 
 - Orbital can accidentally grow into a second repo-memory system if run evidence, accepted/rejected attempts, file attribution, and session reports are described as durable change history.
 - Direct `ngitd-core` integration inside Orbital would blur product ownership before Prism exists to coordinate the broader workflow.
+- A repo-grounded planning/interview workflow such as Matt Pocock's `/grill-with-docs` could blur Orbital's scope if treated as part of delegation. It belongs in Prism because it is pre-delegation context formation, not secondary-agent run supervision.
 
 Current Baseline:
 
 - Orbital owns agent-run diagnostics and fallback file attribution under `.orbital/`.
 - `ngitd-core` owns repo-local `.ngit/` memory: repo snapshots, captured changes, durable evidence artifacts, annotations, terminal dispositions, and lineage.
 - Prism is the planned coordinating app that can connect Orbital run artifacts to `ngitd-core` evidence or annotations later.
+- Prism should also own any durable context-grilling workflow: repo inspection, question planning, user-confirmed answers, glossary term state, ADR candidate state, artifact review, and approved writes to `CONTEXT.md` or `docs/adr/`.
 
 Workplan:
 
-- [ ] Keep `get_server_info.system_boundaries.integration_posture` set to `artifact_contract_only`.
-- [ ] Treat Orbital `accept_candidate`, `needs_repair`, and `reject` as run-control assessment values, not repo-change dispositions.
-- [ ] Keep handoff session reviews scoped to delegated attempts and primary operational review state.
-- [ ] Keep file attribution fallback-level until Prism coordinates richer repo-change memory through `ngitd-core`.
-- [ ] Do not add `.ngit/` writes, `ngit` subprocess calls, `ngitd-core` config discovery, or ngit-specific runtime dependencies to Orbital.
+Implemented baseline:
+
+- `get_server_info.system_boundaries.integration_posture` is set to `artifact_contract_only`.
+- Orbital `accept_candidate`, `needs_repair`, and `reject` are documented as run-control assessment values, not repo-change dispositions.
+- Handoff session reviews are scoped to delegated attempts and primary operational review state.
+- File attribution is documented as fallback-level until Prism coordinates richer repo-change memory through `ngitd-core`.
+- Orbital has no `.ngit/` writes, no `ngit` subprocess calls, no `ngitd-core` config discovery, and no ngit-specific runtime dependency.
+
+Remaining work:
+
 - [ ] Define future artifact exports so Prism can attach Orbital run summaries, permission logs, check evidence, telemetry diagnostics, and warning/capability-gap reports to `ngitd-core` records.
-- [ ] Add regression tests that server metadata, primary guidance, and docs preserve this boundary.
+- [ ] Capture the Prism context-grilling design in Prism's own docs: a downloadable/installable app workflow with durable session state, harness switching, repo-grounded questions, user confirmation, `CONTEXT.md` glossary updates, selective ADR generation, and later `ngitd-core` capture.
+- [ ] Define the narrow Orbital integration point for approved planning artifacts: Orbital may accept references or bounded excerpts from Prism-generated `CONTEXT.md` and ADRs as worker-safe task context, without owning their creation or review.
+- [ ] Broaden regression tests as new tools are added so server metadata, primary guidance, and docs preserve this boundary.
 
 Decision rule:
 
-- Orbital may observe, summarize, and recommend for agent runs. Prism coordinates cross-system workflow. `ngitd-core` records durable repo-change evidence, disposition, and lineage.
+- Orbital may observe, summarize, and recommend for agent runs. Prism coordinates cross-system workflow and pre-build context formation. `ngitd-core` records durable repo-change evidence, disposition, and lineage.
 
 ### Adapter Drift
 

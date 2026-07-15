@@ -1,0 +1,28 @@
+{
+  "fixture_id": "codex_official_stderr_guardian_failure",
+  "profile_id": "codex_acp_official",
+  "runtime_family": "codex",
+  "source": "synthetic scrubbed official Codex ACP guardian failure and stderr transcript",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<CODEX_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call\",\"toolCallId\":\"guardian-1\",\"status\":\"in_progress\",\"kind\":\"think\",\"title\":\"Guardian Review\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"tool_call_update\",\"toolCallId\":\"guardian-1\",\"status\":\"failed\",\"rawOutput\":{\"formatted_output\":\"Status: Blocked\"}}}}",
+    "! GuardianError: command rejected by local Codex runtime",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"status\":\"failed\",\"usage\":{\"totalTokens\":75},\"_meta\":{\"model\":\"gpt-5.5\"}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/prompt"],
+    "server_methods": ["session/update"],
+    "session_updates": ["tool_call", "tool_call_update"],
+    "normalized_features": ["tools", "stderr"],
+    "result_statuses": ["failed"],
+    "require_usage_payload": true,
+    "require_model_metadata": true,
+    "require_stderr": true,
+    "permission_behavior": "capability_gap"
+  }
+}

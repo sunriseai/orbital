@@ -77,6 +77,8 @@ Primary risks addressed: adapter drift, permission ambiguity, profile mismatch, 
 
 Strategic decision: Phase 3 should treat diagnostic evidence as the product control for nondeterministic harness behavior. Orbital cannot make primary and secondary models fully deterministic, but it can preserve raw artifacts, normalize a diagnostic timeline, separate observations from inferences, and make warnings, capability gaps, and next-inspection pointers deterministic. This is an artifact contract for future Prism coordination, not direct `ngitd-core` integration.
 
+Next implementation slice: harden the Codex/OpenCode ACP conformance matrix. The immediate work should broaden replayable fixtures and diagnostics around real adapter behavior, especially stop/cancel, stderr, malformed JSON-RPC, partial terminal results, permission capability gaps, OpenCode ask-config multi-request flows, and official Codex app-server gaps. The goal is not to promote either runtime to `known_good_acp` yet; it is to make the remaining capability gaps explicit, tested, and visible to the primary harness.
+
 Deliverables:
 
 - Normalize ACP event shapes across OpenCode, Pi, Codex, and API-backed Claude Agent SDK where available.
@@ -97,7 +99,7 @@ Deliverables:
 - Mark each profile's support tier from fixture and smoke-run evidence.
 - Use fake ACP conformance as the local baseline, then add real-harness conformance fixtures for Codex and OpenCode before considering either profile known-good.
 - Keep real-runtime permission smoke outcomes explicit: `pass` means a permission request was observed and resolved, while `permission_capability_gap` means the harness completed without emitting an ACP permission request. For Codex local-subscription profiles, document that this outcome depends on the local Codex permission mode: `Ask for Approval` can exercise ACP permission routing, while `Approve for me` can approve internally before Orbital sees a request. For OpenCode, use `opencode_acp_local_ask` when the test or delegation requires bash/edit permission mediation.
-- Treat OpenCode permission configuration as the first practical harness-specific enforcement lever: use `OPENCODE_CONFIG_CONTENT` at the profile level to force `bash`/`edit` asks, preserve OpenCode's structured request context, and keep `once` as the normal approval outcome unless the primary explicitly wants session-scoped `always` behavior.
+- Treat OpenCode permission configuration as the first practical harness-specific enforcement lever: use `OPENCODE_CONFIG_CONTENT` at the profile level to force `bash`/`edit` asks, preserve OpenCode's structured request context, and keep `once` as the normal approval outcome unless the primary explicitly wants session-scoped `always` behavior. When the run should also control model/cost, use explicit OpenCode Zen ask profiles such as `opencode_acp_big_pickle_ask` (`opencode/big-pickle`, documented free for a limited time with a free-period data-use caveat) or `opencode_acp_glm52_ask` (`opencode/glm-5.2`, metered).
 - Validate the intended mixed-harness shape first: Codex primary supervising OpenCode secondary through Orbital MCP to ACP, with OpenCode ask-config permission mediation. Add Claude primary to this target matrix after its setup path is verified.
 - Treat same-runtime primary/secondary testing, such as Codex controlling Codex ACP, as validation coverage rather than the target product workflow. The target workflow is a high-capability primary harness delegating bounded work to smaller, cheaper, local, or specialized secondary harnesses.
 - Keep richer Git/SDLC attribution, direct `ngitd-core` integration, and stronger sandbox execution out of this phase unless a conformance fixture requires a narrow supporting change.
@@ -106,9 +108,11 @@ Exit criteria:
 
 - Each supported ACP harness can pass a smoke run.
 - Manual local ACP smoke currently covers legacy Codex ACP and OpenCode; OpenCode smoke records OpenCode `1.17.13` and ACP `protocolVersion=1`.
-- OpenCode ask-config permission mediation is represented by a scrubbed conformance fixture that proves multiple real `session/request_permission` events and `once` resolutions through `opencode_acp_local_ask`; companion failure-mode fixtures cover rejection, missing request option IDs, and JSON-RPC permission resolution errors.
-- Official Codex ACP app-server validation is represented by the side-by-side `codex_acp_official` profile, manual wrappers, and a scrubbed conformance fixture, but it remains experimental until the fixture matrix covers all claimed capabilities.
-- Manual local ACP permission smoke reports either a full approval round trip or a clearly labeled runtime permission capability gap; OpenCode permission smoke targets `opencode_acp_local_ask` so bash/edit approvals are config-forced rather than prompt-dependent.
+- OpenCode ask-config permission mediation is represented by scrubbed and synthetic conformance fixtures that prove multiple real `session/request_permission` events, `once` resolutions, rejection, missing request option IDs, JSON-RPC permission resolution errors, ambiguous option handling, and mixed allow/deny multi-request outcomes.
+- OpenCode default ACP validation includes fixture coverage for smoke behavior, stop/cancel, stderr failure, partial terminal result shape, and explicit permission capability gaps.
+- Official Codex ACP app-server validation is represented by the side-by-side `codex_acp_official` profile, manual wrappers, and scrubbed/synthetic conformance fixtures for permission capability gaps, stop/cancel, stderr/guardian failure, malformed/unknown payloads, model metadata, adapter usage payloads, and terminal result shape, but it remains experimental until the fixture matrix covers all claimed capabilities.
+- Conformance reports expose a `feature_states` matrix with `observed`, `missing`, `not_applicable`, and `capability_gap` values, plus bounded raw references for malformed payloads, unknown payloads, stderr, and capability gaps.
+- Manual local ACP permission smoke reports either a full approval round trip or a clearly labeled runtime permission capability gap; OpenCode permission smoke targets `opencode_acp_local_ask` by default so bash/edit approvals are config-forced rather than prompt-dependent, and can be pointed at explicit model profiles such as `opencode_acp_big_pickle_ask` for free-model validation.
 - Claude Agent SDK ACP exists as disabled API-backed profile metadata, but remains unverified until it passes explicit API-key smoke.
 - Capability gaps are reported clearly instead of hidden.
 - Diagnostic output can explain what Orbital observed, what it inferred, what remains unknown, and which artifact should be inspected next.
@@ -196,9 +200,11 @@ These are valuable, but they should build on a trusted delegation layer rather t
 
 Possible later work:
 
+- Prism-native context grilling inspired by Matt Pocock's `/grill-with-docs`: a durable, app-owned planning interview that can switch harnesses, inspect repo code/docs, maintain resumable question state, and propose reviewed `CONTEXT.md` glossary updates plus selective ADRs before implementation.
 - Prism coordination of Orbital run artifacts with `ngitd-core` repo memory.
 - Rich dirty-workdir history, branch/commit metadata, captured-change records, terminal dispositions, and cross-run file lineage through `ngitd-core`.
 - A stable artifact handoff contract so Prism can attach Orbital run summaries, permission records, checks, and diagnostics as `ngitd-core` evidence or annotations.
+- A narrow Orbital consumption path for Prism-approved planning artifacts, where `CONTEXT.md` and ADR excerpts can be passed as bounded worker context without making Orbital responsible for planning interviews or ADR generation.
 - Containerized or sandboxed execution modes for stronger filesystem, network, and process enforcement.
 - Higher-level management or prompt-policy overlays for teams that want stricter approval workflows.
 

@@ -1,0 +1,24 @@
+{
+  "fixture_id": "codex_official_malformed_unknown",
+  "profile_id": "codex_acp_official",
+  "runtime_family": "codex",
+  "source": "synthetic scrubbed official Codex ACP malformed and unknown payload transcript",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\",\"update\":{\"sessionUpdate\":\"guardian_status_update\",\"status\":\"approved\"}}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"codex/guardian\",\"params\":{\"sessionId\":\"<CODEX_SESSION>\"}}",
+    "< {\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"stopReason\":\"end_turn\",\"usage\":{\"totalTokens\":10},\"_meta\":{\"model\":\"gpt-5.5\"}}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize"],
+    "server_methods": ["session/update", "codex/guardian"],
+    "unknown_methods": ["codex/guardian"],
+    "unknown_session_updates": ["guardian_status_update"],
+    "malformed_line_numbers": [5],
+    "require_usage_payload": true,
+    "require_model_metadata": true,
+    "permission_behavior": "capability_gap"
+  }
+}

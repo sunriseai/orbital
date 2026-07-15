@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+FEATURE_STATES = {"observed", "missing", "not_applicable", "capability_gap"}
+
 
 @dataclass
 class AcpConformanceExpectation:
@@ -26,6 +28,7 @@ class AcpConformanceExpectation:
     require_usage_payload: bool = False
     require_model_metadata: bool = False
     require_stderr: bool = False
+    feature_states: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -52,6 +55,9 @@ SUPPORTED_PERMISSION_BEHAVIORS = {"round_trip", "multi_round_trip", "capability_
 def evaluate_acp_conformance(transcript: str, expectation: AcpConformanceExpectation) -> dict[str, Any]:
     messages = parse_acp_transcript(transcript)
     observed = _observed_features(messages)
+    capabilities = capability_matrix(observed)
+    feature_states = feature_state_matrix(observed, expectation)
+    raw_refs = raw_reference_matrix(messages, feature_states)
     missing = {
         "client_methods": _missing(expectation.client_methods, observed["client_methods"]),
         "server_methods": _missing(expectation.server_methods, observed["server_methods"]),
@@ -98,7 +104,9 @@ def evaluate_acp_conformance(transcript: str, expectation: AcpConformanceExpecta
         "observed": observed,
         "missing": missing,
         "unexpected": {"malformed_lines": unexpected_malformed_lines},
-        "capabilities": capability_matrix(observed),
+        "capabilities": capabilities,
+        "feature_states": feature_states,
+        "raw_refs": raw_refs,
     }
 
 
@@ -117,6 +125,7 @@ def load_acp_conformance_fixture(path: Path | str) -> AcpConformanceFixture:
     permission_behavior = expectation.get("permission_behavior")
     if permission_behavior is not None and permission_behavior not in SUPPORTED_PERMISSION_BEHAVIORS:
         raise ValueError(f"unsupported permission_behavior: {permission_behavior}")
+    feature_states = _feature_states(expectation.get("feature_states"))
     return AcpConformanceFixture(
         fixture_id=str(payload["fixture_id"]),
         profile_id=str(payload["profile_id"]),
@@ -143,6 +152,7 @@ def load_acp_conformance_fixture(path: Path | str) -> AcpConformanceFixture:
             require_usage_payload=bool(expectation.get("require_usage_payload", False)),
             require_model_metadata=bool(expectation.get("require_model_metadata", False)),
             require_stderr=bool(expectation.get("require_stderr", False)),
+            feature_states=feature_states,
         ),
     )
 
@@ -176,6 +186,62 @@ def capability_matrix(observed: dict[str, Any]) -> dict[str, bool]:
         "adapter_usage_payload": bool(observed.get("usage_payload_count")),
         "terminal_result": "terminal_result" in features,
     }
+
+
+def feature_state_matrix(observed: dict[str, Any], expectation: AcpConformanceExpectation) -> dict[str, str]:
+    features = set(observed.get("normalized_features") or [])
+    states = {
+        "initialize": _observed_or_missing("initialize" in set(observed.get("client_methods") or [])),
+        "session_creation": _observed_or_missing("session/new" in set(observed.get("client_methods") or [])),
+        "prompt_submission": _observed_or_missing("session/prompt" in set(observed.get("client_methods") or [])),
+        "dialogue": _observed_or_missing("dialogue" in features),
+        "tools": _observed_or_missing("tools" in features),
+        "permissions": _observed_or_missing("permissions" in features),
+        "permission_resolution": _observed_or_missing(bool(observed.get("permission_option_ids"))),
+        "stop_cancel": _observed_or_missing("stop_or_cancel" in features),
+        "stderr": _observed_or_missing("stderr" in features),
+        "model_metadata": _observed_or_missing(bool(observed.get("models"))),
+        "adapter_usage_payload": _observed_or_missing(bool(observed.get("usage_payload_count"))),
+        "canonical_local_log_telemetry": "not_applicable",
+        "malformed_payload_handling": _observed_or_missing(bool(observed.get("malformed_lines"))),
+        "terminal_result_shape": _observed_or_missing("terminal_result" in features),
+    }
+    if expectation.permission_behavior == "capability_gap":
+        states["permissions"] = "capability_gap"
+        states["permission_resolution"] = "capability_gap"
+    elif expectation.permission_behavior == "not_applicable":
+        states["permissions"] = "not_applicable"
+        states["permission_resolution"] = "not_applicable"
+    for feature, state in expectation.feature_states.items():
+        if feature in states:
+            states[feature] = state
+    return states
+
+
+def raw_reference_matrix(messages: list[dict[str, Any]], feature_states: dict[str, str]) -> dict[str, Any]:
+    refs: dict[str, Any] = {
+        "malformed_payloads": [
+            _raw_line_ref(item)
+            for item in messages
+            if item.get("malformed")
+        ],
+        "unknown_payloads": [
+            _raw_line_ref(item)
+            for item in messages
+            if _is_unknown_payload(item)
+        ],
+        "stderr": [
+            _raw_line_ref(item)
+            for item in messages
+            if item.get("stderr")
+        ],
+        "capability_gaps": [
+            {"feature": feature, "ref": f"feature_states.{feature}"}
+            for feature, state in feature_states.items()
+            if state == "capability_gap"
+        ],
+    }
+    return refs
 
 
 def parse_acp_transcript(transcript: str) -> list[dict[str, Any]]:
@@ -288,6 +354,42 @@ def _observed_features(messages: list[dict[str, Any]]) -> dict[str, Any]:
     return observed
 
 
+def _observed_or_missing(observed: bool) -> str:
+    return "observed" if observed else "missing"
+
+
+def _raw_line_ref(item: dict[str, Any]) -> dict[str, Any]:
+    ref: dict[str, Any] = {"line": item.get("line_number")}
+    if item.get("direction"):
+        ref["direction"] = item["direction"]
+    if item.get("malformed"):
+        ref["kind"] = "malformed"
+    elif item.get("stderr"):
+        ref["kind"] = "stderr"
+    else:
+        message = item.get("message") if isinstance(item.get("message"), dict) else {}
+        method = message.get("method")
+        if isinstance(method, str):
+            ref["method"] = method
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        update = params.get("update") if isinstance(params.get("update"), dict) else {}
+        session_update = update.get("sessionUpdate")
+        if isinstance(session_update, str):
+            ref["session_update"] = session_update
+    return ref
+
+
+def _is_unknown_payload(item: dict[str, Any]) -> bool:
+    message = item.get("message") if isinstance(item.get("message"), dict) else {}
+    method = message.get("method")
+    if isinstance(method, str) and method not in _KNOWN_METHODS:
+        return True
+    params = message.get("params") if isinstance(message.get("params"), dict) else {}
+    update = params.get("update") if isinstance(params.get("update"), dict) else {}
+    session_update = update.get("sessionUpdate")
+    return isinstance(session_update, str) and session_update not in _KNOWN_SESSION_UPDATES
+
+
 def _missing_permission_behavior(expected: str | None, observed: dict[str, Any]) -> list[str]:
     if expected is None:
         return []
@@ -376,6 +478,16 @@ def _int_list(value: Any) -> list[int]:
         except (TypeError, ValueError):
             continue
     return values
+
+
+def _feature_states(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    states: dict[str, str] = {}
+    for feature, state in value.items():
+        if isinstance(feature, str) and isinstance(state, str) and state in FEATURE_STATES:
+            states[feature] = state
+    return states
 
 
 _KNOWN_METHODS = {

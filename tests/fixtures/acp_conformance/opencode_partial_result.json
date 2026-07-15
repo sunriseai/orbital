@@ -1,0 +1,19 @@
+{
+  "fixture_id": "opencode_partial_result",
+  "profile_id": "opencode_acp_local",
+  "runtime_family": "opencode",
+  "source": "synthetic scrubbed OpenCode ACP partial terminal result transcript",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\",\"prompt\":[{\"type\":\"text\",\"text\":\"<PROMPT>\"}]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/prompt"],
+    "permission_behavior": "not_applicable",
+    "feature_states": {
+      "terminal_result_shape": "capability_gap"
+    }
+  }
+}

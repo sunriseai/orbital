@@ -6,8 +6,8 @@ LOG_DIR="${ORBITAL_MANUAL_LOG_DIR:-$ROOT_DIR/tests/manual/logs}"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/local_opencode_acp_permission_smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
 
-PROFILE="opencode_acp_local_ask"
-PROFILE_LABEL="OpenCode local ACP permission (ask config)"
+PROFILE="${ORBITAL_OPENCODE_ACP_PERMISSION_PROFILE:-opencode_acp_local_ask}"
+PROFILE_LABEL="${ORBITAL_OPENCODE_ACP_PERMISSION_LABEL:-OpenCode local ACP permission (ask config)}"
 REQUIRED_COMMAND="opencode"
 TIMEOUT_SECONDS="${ORBITAL_REAL_HARNESS_TIMEOUT_SECONDS:-120}"
 FAILURES=0

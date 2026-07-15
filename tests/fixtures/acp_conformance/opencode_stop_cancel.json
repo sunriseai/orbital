@@ -1,0 +1,20 @@
+{
+  "fixture_id": "opencode_stop_cancel",
+  "profile_id": "opencode_acp_local",
+  "runtime_family": "opencode",
+  "source": "synthetic scrubbed OpenCode ACP cooperative cancel transcript",
+  "transcript_lines": [
+    "> {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":1,\"agentInfo\":{\"name\":\"OpenCode\",\"version\":\"1.17.13\"}}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{\"cwd\":\"<WORKDIR>\",\"mcpServers\":[]}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"sessionId\":\"<OPENCODE_SESSION>\"}}",
+    "> {\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"session/cancel\",\"params\":{\"sessionId\":\"<OPENCODE_SESSION>\"}}",
+    "< {\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"status\":\"cancelled\"}}"
+  ],
+  "expectation": {
+    "client_methods": ["initialize", "session/new", "session/cancel"],
+    "result_statuses": ["cancelled"],
+    "normalized_features": ["stop_or_cancel"],
+    "permission_behavior": "not_applicable"
+  }
+}

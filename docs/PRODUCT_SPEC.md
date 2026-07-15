@@ -4,7 +4,7 @@
 
 Orbital is an MCP delegation layer for running, supervising, and reviewing secondary coding agents.
 
-The user installs Orbital locally, configures one or more harness profiles, classifies those profiles by the kinds of tasks they are good at, and lets the primary harness delegate bounded work to the right secondary worker through a normalized MCP interface. Orbital owns process launch, protocol adaptation, permissions, run evidence, file attribution, and structured handoff data. The primary harness owns planning, task judgment, profile choice, and final acceptance.
+The user installs Orbital locally, configures one or more harness profiles, classifies those profiles by the kinds of tasks they are good at, and lets the primary harness delegate bounded work to the right secondary worker through a normalized MCP interface. Orbital owns process launch, protocol adaptation, permissions, run evidence, run-local fallback file attribution, and structured handoff data. The primary harness owns planning, task judgment, profile choice, and final acceptance.
 
 The existing Prole Harness MCP codebase proves that this loop is useful, but it is broader and more benchmark-oriented than Orbital should be. Orbital should rebuild the idea around a crisp MCP-to-ACP product: install, configure harnesses, classify them, run tasks, capture evidence, and return primary-safe state.
 
@@ -305,12 +305,15 @@ The session model should preserve the first draft's useful operating loop:
 Orbital should keep a clean boundary with Prism and `ngitd-core`:
 
 - Prism is the future coordinating app. It decides when a delegated run, repo capture, human review, and product workflow should be connected.
+- Prism should own pre-delegation context formation workflows, including a durable context-grilling workflow inspired by Matt Pocock's `/grill-with-docs` that produces reviewed `CONTEXT.md` glossary updates and selective ADRs before implementation.
 - Orbital owns agent-run truth: harness orchestration, ACP/CLI lifecycle, permissions, run diagnostics, liveness, telemetry correlation, primary-safe summaries, and attachable run artifacts.
 - `ngitd-core` owns repo-change truth: repo snapshots, captured changes, durable evidence artifacts, annotations, terminal dispositions, and lineage.
 
 Orbital accept/reject language is a run-control assessment only. `accept_candidate`, `needs_repair`, and `reject` describe whether a delegated run appears usable, repairable, or unsuitable for the current task. They are not repo-change dispositions and must not imply `ngitd-core` lineage.
 
 Orbital should not write `.ngit/`, call `ngit`, or become the durable repo evidence store in the core MCP product. Its integration posture is an artifact contract: produce bounded, structured, inspectable run artifacts that Prism can later attach to `ngitd-core` evidence or annotations.
+
+Orbital may later consume Prism-approved planning artifacts, such as bounded excerpts from `CONTEXT.md` and ADRs, as worker-safe context for delegated runs. It should not own the planning interview, glossary state, ADR candidate review, or artifact write workflow.
 
 ## Open Questions
 

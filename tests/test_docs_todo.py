@@ -114,6 +114,29 @@ class DocsTodoTests(unittest.TestCase):
         ]:
             self.assertIn(phrase, self.readme + self.product + self.tech + self.roadmap + self.todo)
 
+    def test_specs_and_todo_preserve_acp_conformance_matrix_contract(self) -> None:
+        for phrase in [
+            "feature_states",
+            "`observed`, `missing`, `not_applicable`, or `capability_gap`",
+            "bounded `raw_refs`",
+            "Canonical local-log telemetry is `not_applicable`",
+            "ambiguous permission options",
+            "mixed allow/deny multi-request outcomes",
+            "No profile is promoted to `known_good_acp`",
+        ]:
+            self.assertIn(phrase, self.tech + self.roadmap + self.todo)
+
+    def test_docs_preserve_explicit_opencode_zen_ask_profiles(self) -> None:
+        docs = self.readme + self.tech + self.roadmap + self.todo
+        for phrase in [
+            "opencode_acp_big_pickle_ask",
+            "opencode/big-pickle",
+            "free for a limited time",
+            "free-period data-use caveat",
+            "opencode_acp_glm52_ask",
+        ]:
+            self.assertIn(phrase, docs)
+
     def test_readme_explains_orbital_observation_model(self) -> None:
         for phrase in [
             "## Observation Model",
