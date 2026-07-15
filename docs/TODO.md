@@ -22,6 +22,7 @@ Implemented and currently validated:
 - ACP conformance reports now expose both backward-compatible boolean `capabilities` and a `feature_states` matrix with `observed`, `missing`, `not_applicable`, and `capability_gap` values. Bounded `raw_refs` preserve malformed payload, unknown payload, stderr, and capability-gap locations for debug inspection.
 - The Phase 3 conformance matrix now includes synthetic/scrubbed coverage for OpenCode ambiguous permission options, mixed allow/deny multi-request permissions, stop/cancel, stderr failure, partial terminal result behavior, and official Codex stop/cancel, stderr/guardian failure, malformed/unknown payload handling, permission capability gaps, model metadata, usage payloads, and terminal result shape.
 - Initial diagnostic evidence fields are implemented on run summaries and status digests: `diagnostic_timeline`, `diagnostic_explainability`, compact diagnostic counts, top next step, and primary-safe artifact references derived from existing `.orbital/` artifacts.
+- Prism-facing artifact packages are implemented as derived `orbital_run_artifact_package` payloads. They expose the selected profile execution contract, evidence, diagnostics, permissions, fallback file attribution, log refs, token/model telemetry, and diagnostic-only usage caveats under `artifact_contract_only`, with no `.ngit/` writes, no `ngit` subprocess calls, and no `ngitd-core` runtime dependency.
 - Codex ACP permission routing is documented as local-runtime-config-dependent: `Ask for Approval` can emit ACP permission requests for Orbital to mediate, while `Approve for me` can let the secondary Codex runtime approve internally and complete with `permission_capability_gap`.
 - OpenCode ACP permission routing has a deterministic config lever: `opencode_acp_local_ask` injects `OPENCODE_CONFIG_CONTENT` with `permission.bash=ask` and `permission.edit=ask` so bash/edit permission mediation is not prompt-dependent. Explicit OpenCode Zen ask profiles now combine that permission behavior with pinned models, including `opencode_acp_big_pickle_ask` for `opencode/big-pickle` free-model smoke validation and `opencode_acp_glm52_ask` for stronger metered validation. Its scrubbed conformance fixture proves a real multi-request `session/request_permission` round trip with `once` approvals, and synthetic failure fixtures lock down denial, missing option IDs, and JSON-RPC resolution-error detection.
 - OpenCode model selection is deterministic by explicit profile only. `execution_contract.model_assignment` tells the primary whether Orbital will send `session/set_model`; `selection_policy.implicit_model_assignment` remains `false` so recommendations do not silently assign cheap or pinned OpenCode models.
@@ -32,12 +33,33 @@ Implemented and currently validated:
 
 Current engineering focus:
 
-- Treat diagnostic evidence as the next product control: Orbital cannot make primary or secondary harnesses deterministic, but it can make observations, raw artifacts, normalized timelines, warnings, capability gaps, and next-inspection pointers deterministic enough to diagnose what happened.
-- Broaden the explicit adapter conformance fixture matrix for Codex and OpenCode before expanding it to Pi or Claude Agent SDK ACP.
-- Apply the matrix first to smoke-verified local Codex ACP, official Codex ACP, and OpenCode ACP, because fuller real ACP conformance is the next support-tier gate.
+- Pause broad Orbital core expansion after committing the artifact package slice. The next major work should happen in Prism, where `orbital_run_artifact_package` payloads can be attached to `ngitd-core` records.
+- Keep Orbital follow-up narrow and evidence-driven: fix ACP compatibility drift, harden package fields that Prism actually consumes, improve exact token correlation, or add targeted Codex/OpenCode fixture coverage when smoke logs expose a gap.
 - Prefer validation that exercises the intended mixed-harness delegation shape over scenarios that only prove a frontier harness can call another instance of itself. The near-term target matrix is Codex and, once verified, Claude as primary harnesses supervising OpenCode through `opencode_acp_local_ask` or an explicit pinned-model ask profile such as `opencode_acp_big_pickle_ask` as the secondary harness. The primary chooses the profile; Orbital should not automate model assignment from cost heuristics.
-- Keep direct `../ngitd-core` integration, richer SDLC/git attribution, and containerized sandbox enforcement as later Prism or platform layers unless an adapter-conformance task exposes a narrow prerequisite.
-- Keep the TODO below as the remaining implementation, hardening, and promotion backlog. Items that are already partially implemented should be treated as "finish, broaden, or lock down" work, not as absence of any code.
+- Keep direct `../ngitd-core` integration, richer SDLC/git attribution, Prism coordination, and containerized sandbox enforcement outside Orbital unless a later Prism integration identifies a narrow Orbital package-contract prerequisite.
+- Treat the numbered TODO sections below as a historical implementation and hardening backlog. They are not authoritative over this current checkpoint; items already implemented should be read as "broaden or lock down only if needed," not as absence of code.
+
+## Pause/Resume Checkpoint
+
+Stable state to preserve:
+
+- Orbital's current public handoff contract is `get_run_artifact_package`, which returns a derived `orbital_run_artifact_package` under `artifact_contract_only`.
+- The package is primary-safe and includes run identity, selected profile execution contract, evidence, diagnostics, permissions, fallback file attribution, log refs, token/model telemetry, and diagnostic-only usage caveats.
+- `.orbital/` remains operational run/session storage. It is enough to regenerate summaries, diagnostics, and artifact packages, but it is not durable repo-change memory.
+- `ngitd-core` remains external repo memory. Orbital must keep no `.ngit/` writes, no `ngit` subprocess calls, and no `ngitd-core` runtime dependency.
+- Real Codex and OpenCode profiles remain `experimental_acp`; no profile is promoted to `known_good_acp`.
+- OpenCode model selection remains deterministic by explicit profile only. Orbital does not automatically choose cheap, free, or pinned models.
+
+Immediate next action:
+
+- [ ] Commit the current artifact package and documentation slice after tests pass.
+
+Resume order after a pause:
+
+1. Run `python3 -m pytest -q` and `git diff --check`.
+2. Inspect `get_server_info` and `get_run_artifact_package` before changing public contracts.
+3. If the goal is repo-memory integration, switch to Prism work first; let Prism consume Orbital packages and coordinate `ngitd-core`.
+4. Return to Orbital only for targeted fixes discovered by Prism consumption, Codex/OpenCode manual smokes, or ACP conformance fixture drift.
 
 Risk-ranked hardening priorities:
 
@@ -59,12 +81,12 @@ Current diagnostic decision:
 - Orbital's current integration posture with `ngitd-core` is `artifact_contract_only`: no `.ngit/` writes, no `ngit` subprocess calls, and no runtime dependency. Prism should later decide when Orbital artifacts become `ngitd-core` evidence or annotations.
 - Matt Pocock's `/grill-with-docs` pattern is a Prism design issue, not an Orbital core feature. The durable version should be a Prism-owned context-grilling workflow that inspects repo code/docs, interviews the engineer one question at a time, and proposes `CONTEXT.md` glossary updates plus high-value ADRs before implementation. Orbital should later consume approved planning artifacts as bounded worker context, but it should not own the interview state machine, glossary, or ADR generation.
 
-## Next Workplan: Phase 3 ACP Conformance Matrix
+## Implemented Workplan: Prism Handoff Artifact Package
 
 Goal:
 
-- Broaden the replayable Codex/OpenCode ACP evidence matrix so adapter drift, permission ambiguity, and runtime-specific capability gaps are visible before any support-tier promotion.
-- Keep the work inside Orbital's current product boundary: no direct `ngitd-core` integration, no sandbox claims, no SDLC workflow expansion, and no `known_good_acp` promotion.
+- Exposed a stable, primary-safe run package that Prism can later attach to `ngitd-core` evidence or annotations.
+- Kept the work inside Orbital's current product boundary: no direct `ngitd-core` integration, no persistent package file, no sandbox claims, no SDLC workflow expansion, and no automated profile/model assignment.
 
 Scope:
 

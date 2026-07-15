@@ -249,6 +249,10 @@ Worker prose is context, not proof.
 
 Diagnostic evidence is a run-level aid for the primary harness. It explains what Orbital observed, what Orbital inferred, what remains unknown, and which `.orbital/` artifact should be inspected next. It is not repo-change lineage; Prism can later attach these artifacts to `ngitd-core` evidence or annotations.
 
+Orbital should expose a derived `orbital_run_artifact_package` as its Prism handoff boundary. The package should bundle run identity, selected profile and execution contract, evidence status, diagnostics, permission summaries, fallback file attribution, log refs, token/model telemetry, and diagnostic-only usage caveats without raw protocol dumps. It is not a persistent package file in V1; it is generated from existing `.orbital/` artifacts when requested.
+
+Current checkpoint: if development pauses after the Phase 3 artifact package work, this package is the stable pickup contract. Resume by using Orbital as the run orchestration and diagnostic source, then let Prism decide when those run artifacts should become `ngitd-core` evidence, annotations, or repo-memory records. Do not add repo-change disposition or lineage semantics to Orbital to close that loop.
+
 ### 6. Repair Loop
 
 Orbital should help the primary harness turn a failed or partial run into a smaller repair task.
@@ -314,9 +318,11 @@ Orbital should keep a clean boundary with Prism and `ngitd-core`:
 
 Orbital accept/reject language is a run-control assessment only. `accept_candidate`, `needs_repair`, and `reject` describe whether a delegated run appears usable, repairable, or unsuitable for the current task. They are not repo-change dispositions and must not imply `ngitd-core` lineage.
 
-Orbital should not write `.ngit/`, call `ngit`, or become the durable repo evidence store in the core MCP product. Its integration posture is an artifact contract: produce bounded, structured, inspectable run artifacts that Prism can later attach to `ngitd-core` evidence or annotations.
+Orbital should not write `.ngit/`, call `ngit`, or become the durable repo evidence store in the core MCP product. Its integration posture is `artifact_contract_only`: produce bounded, structured, inspectable run artifacts that Prism can later attach to `ngitd-core` evidence or annotations.
 
 Orbital may later consume Prism-approved planning artifacts, such as bounded excerpts from `CONTEXT.md` and ADRs, as worker-safe context for delegated runs. It should not own the planning interview, glossary state, ADR candidate review, or artifact write workflow.
+
+Pause/resume rule: the next major product step is Prism consuming Orbital run artifacts and coordinating them with `ngitd-core`. Orbital-only work should remain narrow: ACP compatibility, diagnostic accuracy, exact telemetry correlation, and primary-safe package-contract fixes discovered by that integration.
 
 ## Open Questions
 

@@ -23,6 +23,22 @@ class DocsTodoTests(unittest.TestCase):
     def test_readme_links_execution_checklist(self) -> None:
         self.assertIn("[Implementation TODO](docs/TODO.md)", self.readme)
 
+    def test_readme_starts_with_practical_getting_started_path(self) -> None:
+        self.assertIn("## Getting Started", self.readme)
+        self.assertIn("The best current way to use Orbital", self.readme)
+        self.assertLess(self.readme.index("## Getting Started"), self.readme.index("## Current Checkpoint"))
+        for phrase in [
+            "orbital doctor",
+            "orbital profiles",
+            "orbital mcp-config",
+            "orbital-mcp-smoke --profile fake_acp",
+            "opencode_acp_local_ask",
+            "get_run_summary",
+            "get_run_artifact_package",
+            "profile selection explicit",
+        ]:
+            self.assertIn(phrase, self.readme)
+
     def test_todo_has_expected_execution_sections(self) -> None:
         headings = re.findall(r"^## \d+\. (.+)$", self.todo, flags=re.MULTILINE)
         self.assertEqual(
@@ -97,10 +113,31 @@ class DocsTodoTests(unittest.TestCase):
             "terminal dispositions",
             "lineage",
             "no `.ngit/` writes",
+            "orbital_run_artifact_package",
+            "no `ngit` subprocess calls",
+            "no `ngitd-core` runtime dependency",
+            "diagnostic-only usage",
         ]:
             self.assertIn(phrase, self.product + self.tech + self.roadmap + self.todo + self.readme)
         self.assertIn("artifact_contract_only", self.todo)
         self.assertIn("not direct `ngitd-core` integration", self.roadmap)
+
+    def test_docs_capture_pause_ready_checkpoint(self) -> None:
+        docs = self.readme + self.product + self.tech + self.roadmap + self.todo
+        for phrase in [
+            "Current Checkpoint",
+            "Pause/Resume Checkpoint",
+            "pause-ready",
+            "stable pickup",
+            "next major work should happen in Prism",
+            "get_run_artifact_package",
+            "orbital_run_artifact_package",
+            "not authoritative over this current checkpoint",
+            "Return to Orbital only for targeted fixes",
+        ]:
+            self.assertIn(phrase, docs)
+        self.assertIn("## Implemented Workplan: Prism Handoff Artifact Package", self.todo)
+        self.assertNotIn("## Next Workplan: Prism Handoff Artifact Package", self.todo)
 
     def test_specs_and_todo_preserve_diagnostic_evidence_contract(self) -> None:
         for phrase in [

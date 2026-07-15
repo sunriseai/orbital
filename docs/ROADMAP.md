@@ -77,7 +77,9 @@ Primary risks addressed: adapter drift, permission ambiguity, profile mismatch, 
 
 Strategic decision: Phase 3 should treat diagnostic evidence as the product control for nondeterministic harness behavior. Orbital cannot make primary and secondary models fully deterministic, but it can preserve raw artifacts, normalize a diagnostic timeline, separate observations from inferences, and make warnings, capability gaps, and next-inspection pointers deterministic. This is an artifact contract for future Prism coordination, not direct `ngitd-core` integration.
 
-Next implementation slice: harden the Codex/OpenCode ACP conformance matrix. The immediate work should broaden replayable fixtures and diagnostics around real adapter behavior, especially stop/cancel, stderr, malformed JSON-RPC, partial terminal results, permission capability gaps, OpenCode ask-config multi-request flows, and official Codex app-server gaps. The goal is not to promote either runtime to `known_good_acp` yet; it is to make the remaining capability gaps explicit, tested, and visible to the primary harness.
+Current checkpoint: Phase 3 now exposes a Prism-facing `orbital_run_artifact_package` derived from existing run summaries and log refs. This package bundles evidence, diagnostics, permissions, fallback file attribution, token/model telemetry, selected profile execution contract, and boundary metadata for later Prism attachment to `ngitd-core`, while keeping Orbital at `artifact_contract_only` with no direct repo-memory integration.
+
+Next implementation slice: pause broad Orbital core expansion until a Prism consumer exercises the artifact package contract. Near-term Orbital work should be limited to targeted compatibility fixes, fixture updates, or package-contract hardening discovered by Prism, manual Codex/OpenCode smoke tests, or ACP adapter drift.
 
 Deliverables:
 
@@ -117,6 +119,7 @@ Exit criteria:
 - Capability gaps are reported clearly instead of hidden.
 - Diagnostic output can explain what Orbital observed, what it inferred, what remains unknown, and which artifact should be inspected next.
 - Status digests expose compact diagnostic counts without raw events.
+- `get_run_artifact_package` exposes a stable `orbital_run_artifact_package` for Prism-bound handoff without writing a persistent package file or adding `ngitd-core` runtime dependencies.
 - Primary harnesses do not need runtime-specific ACP knowledge.
 - No runtime family is labeled `known_good_acp` without conformance fixture coverage.
 

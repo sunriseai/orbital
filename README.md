@@ -12,6 +12,41 @@ Orbital is not the durable repo-memory layer. It records agent-run diagnostics a
 
 Run summaries expose diagnostic anchors for debugging harness behavior: a primary-safe `diagnostic_timeline` plus `diagnostic_explainability` groups for observed facts, inferred state, unknowns, and next artifact reads.
 
+Use `get_run_artifact_package` when a primary or future Prism workflow needs a stable `orbital_run_artifact_package` for later repo-memory attachment. The package is derived from existing `.orbital/` run artifacts, includes diagnostic-only usage caveats, and preserves the boundary: no `.ngit/` writes, no `ngit` subprocess calls, and no `ngitd-core` runtime dependency.
+
+## Getting Started
+
+The best current way to use Orbital is as a local MCP server that lets a primary coding harness delegate bounded work to a secondary harness, then inspect what happened through summaries, diagnostics, permissions, token telemetry, and artifact packages.
+
+Recommended first path:
+
+1. Install Orbital in a local development environment.
+2. Run `orbital doctor` and `orbital profiles` to inspect available harness profiles.
+3. Configure your primary harness with `orbital mcp-config`.
+4. Start with the fake ACP profile for a deterministic smoke test.
+5. Use OpenCode as the practical secondary harness through `opencode_acp_local_ask` when permission mediation matters.
+6. Use `get_run_summary` for primary-safe review and `get_run_artifact_package` when Prism or another coordinator needs a stable run bundle.
+
+Minimal local setup:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -e .
+orbital doctor
+orbital profiles
+orbital mcp-config
+orbital-mcp-smoke --profile fake_acp --workdir /tmp/orbital-smoke
+```
+
+For real delegated runs, keep profile selection explicit. OpenCode model assignment is deterministic by profile only; Orbital does not automatically choose cheap, free, or pinned models from recommendations. Real Codex and OpenCode ACP profiles are still `experimental_acp`, so use manual smokes and artifact-package review before trusting a runtime path.
+
+## Current Checkpoint
+
+Orbital is pause-ready at the current Phase 3 checkpoint once the artifact package slice is committed. The stable pickup point is the Orbital run-artifact contract: use `get_run_artifact_package` for Prism-bound run bundles, keep Codex and OpenCode real profiles at `experimental_acp`, and validate OpenCode secondary behavior through `opencode_acp_local_ask` or an explicit pinned-model ask profile.
+
+Token usage remains exact-only. Canonical totals come from uniquely correlated Codex/OpenCode local logs; adapter usage payloads remain diagnostic-only usage unless a future policy explicitly promotes them. The next major work should happen in Prism, where these Orbital artifacts can be attached to `ngitd-core` records without adding direct `.ngit/` writes, `ngit` subprocess calls, or `ngitd-core` runtime dependency to Orbital.
+
 ## Observation Model
 
 Orbital only records what it can see through its own control path. It is not a general observer of every action a primary or secondary harness may take.
@@ -28,7 +63,7 @@ Orbital does not see arbitrary model activity outside that loop. If a primary or
 
 The current implementation is intentionally CI-safe to validate: the default tests use local fake harnesses and do not require clicks, credentials, network access, real model calls, or installed real harnesses.
 
-## Get Started
+## Development Setup
 
 Prerequisites:
 

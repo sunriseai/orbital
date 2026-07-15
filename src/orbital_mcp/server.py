@@ -50,6 +50,7 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                 "primary_safe_default": "run responses and digests omit raw dialogue by default; use get_debug_dialogue for explicit raw inspection",
                 "failure_classification": "derived from server evidence and normalized across secondary harnesses",
                 "diagnostic_evidence": "run summaries include primary-safe diagnostic_timeline and diagnostic_explainability fields derived from existing .orbital artifacts for future Prism attachment",
+                "artifact_packages": "get_run_artifact_package returns a derived orbital_run_artifact_package for Prism attachment; it is not repo lineage or a durable repo-change disposition",
                 "token_reporting": "canonical local agent-log telemetry from Codex, Claude, and OpenCode when correlated by workspace and run window; adapter usage is diagnostic only",
                 "model_reporting": "exact adapter model metadata when available; unknown otherwise",
                 "model_assignment": "deterministic by profile only; Orbital does not auto-select cheap or pinned OpenCode models",
@@ -276,6 +277,13 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
     def get_run_summary(run_id: str, max_events: int = 100) -> dict[str, Any]:
         try:
             return ok_response(service.get_run_summary(run_id, max_events))
+        except Exception as exc:
+            return error_response(exc)
+
+    @mcp.tool()
+    def get_run_artifact_package(run_id: str, max_events: int = 100) -> dict[str, Any]:
+        try:
+            return ok_response(service.get_run_artifact_package(run_id, max_events))
         except Exception as exc:
             return error_response(exc)
 

@@ -68,7 +68,7 @@ from .models import (
     to_jsonable,
 )
 from .permissions import choose_option
-from .profiles import HarnessRegistry
+from .profiles import HarnessRegistry, profile_execution_contract
 from .snapshots import FileSnapshot, compare_snapshots, snapshot_workdir
 from .store import RunStore
 from .task_prompt import render_startup_prompt
@@ -216,6 +216,94 @@ class TaskRunService:
     def get_run_summary(self, run_id: str, max_events: int = 100) -> dict[str, Any]:
         return to_jsonable(self._run_summary(run_id, max_events=max_events))
 
+    def get_run_artifact_package(self, run_id: str, max_events: int = 100) -> dict[str, Any]:
+        summary = self._run_summary(run_id, max_events=max_events)
+        verdict = self._run_policy_verdict(summary)
+        permission_summaries = [
+            _permission_artifact_summary(permission)
+            for permission in _latest_permission_records(self.store.read_permissions(run_id))
+        ]
+        next_steps = summary.diagnostic_explainability.diagnostic_next_steps
+        warning_codes = [warning.code for warning in summary.warning_details]
+        return to_jsonable(
+            {
+                "schema_version": 1,
+                "package_kind": "orbital_run_artifact_package",
+                "integration_posture": "artifact_contract_only",
+                "boundary": {
+                    "external_coordinator": "Prism",
+                    "repo_memory_owner": "ngitd-core",
+                    "external_scope": [
+                        "durable repo-change memory",
+                        "repo snapshots",
+                        "repo evidence lineage",
+                        "terminal repo-change dispositions",
+                    ],
+                    "no_ngit_writes": True,
+                    "no_ngit_subprocess": True,
+                    "no_ngitd_runtime_dependency": True,
+                },
+                "run": {
+                    "run_id": summary.run_id,
+                    "schema_version": summary.schema_version,
+                    "workdir": summary.workdir,
+                    "status": summary.status,
+                    "status_reason": summary.status_reason,
+                    "selected_profile": summary.selected_profile,
+                    "execution_contract": self._profile_execution_contract(summary.selected_profile.profile_id),
+                },
+                "digest": {
+                    "evidence_status": summary.evidence_status,
+                    "evidence_score": summary.evidence_score,
+                    "warning_codes": warning_codes,
+                    "failure_classification": summary.failure_classification,
+                    "policy_verdict": verdict.policy_verdict,
+                    "policy_reason_codes": verdict.reason_codes,
+                    "recommended_action": verdict.recommended_action,
+                    "diagnostic_timeline_count": len(summary.diagnostic_timeline),
+                    "diagnostic_unknown_count": len(summary.diagnostic_explainability.unknown),
+                    "diagnostic_next_step_count": len(next_steps),
+                    "diagnostic_top_next_step": next_steps[0] if next_steps else None,
+                    "tokens_known": summary.tokens.known,
+                    "model_known": summary.model.known,
+                },
+                "evidence": {
+                    "status": summary.evidence_status,
+                    "score": summary.evidence_score,
+                    "groups": summary.evidence_groups,
+                    "checks": summary.evidence.checks,
+                    "tool_calls": summary.evidence.tool_calls,
+                },
+                "diagnostics": {
+                    "timeline": summary.diagnostic_timeline,
+                    "explainability": summary.diagnostic_explainability,
+                },
+                "permissions": {
+                    "counts": summary.permission_counts,
+                    "requests": permission_summaries,
+                    "pending_permission_count": len(summary.pending_permission_requests),
+                },
+                "files": {
+                    "changed_files": summary.changed_files,
+                    "pre_existing_changed_files": summary.pre_existing_changed_files,
+                    "changed_since_run_start": summary.changed_since_run_start,
+                    "file_attribution": summary.file_attribution,
+                    "attribution_scope": "fallback_run_local",
+                },
+                "telemetry": {
+                    "tokens": summary.tokens,
+                    "token_sources": summary.token_sources,
+                    "model": summary.model,
+                    "caveats": _artifact_token_caveats(summary),
+                },
+                "artifacts": {
+                    "log_refs": summary.log_refs,
+                    "raw_events_omitted": True,
+                    "persistent_package_file": None,
+                },
+            }
+        )
+
     def get_run_policy_verdict(self, run_id: str) -> dict[str, Any]:
         return to_jsonable(self._run_policy_verdict(self._run_summary(run_id, max_events=0)))
 
@@ -250,6 +338,31 @@ class TaskRunService:
                 log_refs=summary.log_refs,
             )
         )
+
+    def _profile_execution_contract(self, profile_id: str) -> dict[str, Any]:
+        try:
+            profile = self.registry.get(profile_id)
+        except Exception:
+            return {
+                "model_assignment": {
+                    "mode": "unknown_profile",
+                    "model_id": None,
+                    "deterministic": False,
+                    "selection_rule": "Profile metadata was unavailable when this artifact package was built.",
+                },
+                "permission_config": {
+                    "mode": "unknown_profile",
+                    "bash": None,
+                    "edit": None,
+                    "deterministic_ask": False,
+                },
+                "selection_policy": {
+                    "implicit_model_assignment": False,
+                    "requires_explicit_profile_for_model": False,
+                    "metered_profiles_require_opt_in": None,
+                },
+            }
+        return profile_execution_contract(profile)
 
     def get_run_liveness(self, run_id: str, model_log_path: str | None = None) -> dict[str, Any]:
         payload = analyze_run_liveness(self.store.root, run_id, model_log_path=model_log_path)
@@ -2016,6 +2129,71 @@ def _artifact_ref(log_refs: LogRefs | None, name: str) -> str | None:
     if log_refs is None:
         return None
     return getattr(log_refs, name, None)
+
+
+def _permission_artifact_summary(permission: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "permission_id": permission.get("permission_id"),
+        "run_id": permission.get("run_id"),
+        "status": permission.get("status"),
+        "summary": permission.get("summary"),
+        "risk": permission.get("risk"),
+        "command_or_action": permission.get("command_or_action") or permission.get("command") or permission.get("action"),
+        "paths": list(permission.get("paths") or []),
+        "resources": list(permission.get("resources") or []),
+        "options": [
+            {
+                "option_id": option.get("option_id"),
+                "label": option.get("label"),
+                "kind": option.get("kind"),
+            }
+            for option in permission.get("options") or []
+            if isinstance(option, dict)
+        ],
+        "decision": permission.get("decision"),
+        "resolved_option_id": permission.get("resolved_option_id"),
+        "adapter_resolution_status": permission.get("adapter_resolution_status"),
+        "requested_at": permission.get("requested_at"),
+        "resolved_at": permission.get("resolved_at"),
+        "deciding_primary": permission.get("deciding_primary"),
+        "raw_ref": permission.get("raw_ref"),
+        "raw_payload_omitted": True,
+    }
+
+
+def _latest_permission_records(permissions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    latest: dict[str, dict[str, Any]] = {}
+    anonymous: list[dict[str, Any]] = []
+    for permission in permissions:
+        permission_id = str(permission.get("permission_id") or "")
+        if not permission_id:
+            anonymous.append(permission)
+            continue
+        latest[permission_id] = permission
+    return [*anonymous, *latest.values()]
+
+
+def _artifact_token_caveats(summary: RunSummary) -> list[str]:
+    caveats: list[str] = []
+    external = summary.token_sources.get("external_agent_logs") if isinstance(summary.token_sources, dict) else None
+    adapter = summary.token_sources.get("adapter_payloads") if isinstance(summary.token_sources, dict) else None
+    if not summary.tokens.known:
+        caveats.append("Canonical token usage is unknown because no unique correlated local agent-log total is available.")
+    if isinstance(external, dict):
+        caveats.extend(str(item) for item in external.get("caveats") or [])
+    elif external is not None:
+        caveats.extend(str(item) for item in getattr(external, "caveats", []) or [])
+    if isinstance(adapter, dict):
+        adapter_has_usage = any(adapter.get(key) is not None for key in ["input", "output", "cache", "total"])
+    else:
+        adapter_has_usage = adapter is not None and any(
+            getattr(adapter, key, None) is not None for key in ["input", "output", "cache", "total"]
+        )
+    if adapter_has_usage:
+        caveats.append("Adapter payload token usage is diagnostic-only usage unless canonical local-log correlation is known.")
+    if not summary.model.known:
+        caveats.append("Model identity is unknown unless exact adapter metadata or a deterministic profile model is available.")
+    return list(dict.fromkeys(caveats))
 
 
 def _dedupe_diagnostic_entries(entries: list[DiagnosticEntry]) -> list[DiagnosticEntry]:

@@ -23,9 +23,11 @@ class McpTransportValidationTests(unittest.TestCase):
             result = _run_async(_mcp_smoke(tmp, workdir))
 
             self.assertIn("get_server_info", result["tool_names"])
+            self.assertIn("get_run_artifact_package", result["tool_names"])
             self.assertIn("run_task_and_wait", result["tool_names"])
             self.assertEqual(result["server_info"]["name"], "orbital-mcp")
             self.assertIn("deterministic by profile only", result["server_info"]["reporting_policy"]["model_assignment"])
+            self.assertIn("orbital_run_artifact_package", result["server_info"]["reporting_policy"]["artifact_packages"])
             boundaries = result["server_info"]["system_boundaries"]
             self.assertEqual(boundaries["integration_posture"], "artifact_contract_only")
             self.assertIn("Prism", boundaries["external_coordinator"])
@@ -35,6 +37,10 @@ class McpTransportValidationTests(unittest.TestCase):
             self.assertEqual(result["profile_check"]["profile_id"], "fake_acp")
             self.assertFalse(result["profile_check"]["execution_contract"]["selection_policy"]["implicit_model_assignment"])
             self.assertEqual(result["run_summary"]["status"], "completed")
+            self.assertEqual(result["artifact_package"]["package_kind"], "orbital_run_artifact_package")
+            self.assertEqual(result["artifact_package"]["integration_posture"], "artifact_contract_only")
+            self.assertEqual(result["artifact_package"]["run"]["run_id"], result["run_summary"]["run_id"])
+            self.assertTrue(result["artifact_package"]["artifacts"]["raw_events_omitted"])
             self.assertTrue(result["safe_dialogue"]["raw_events_omitted"])
             self.assertTrue(result["safe_dialogue"]["agent_chunks_omitted"])
             self.assertFalse(any("raw" in event for event in result["safe_dialogue"]["events"]))
@@ -84,6 +90,7 @@ async def _mcp_smoke(base_dir: Path, workdir: Path) -> dict:
                 },
             )
             run_id = run_summary["run_id"]
+            artifact_package = await _call_json(session, "get_run_artifact_package", {"run_id": run_id})
             safe_dialogue = await _call_json(session, "get_dialogue", {"run_id": run_id})
             debug_dialogue = await _call_json(
                 session,
@@ -96,6 +103,7 @@ async def _mcp_smoke(base_dir: Path, workdir: Path) -> dict:
                 "profile_check": profile_check,
                 "recommendation": recommendation,
                 "run_summary": run_summary,
+                "artifact_package": artifact_package,
                 "safe_dialogue": safe_dialogue,
                 "debug_dialogue": debug_dialogue,
             }

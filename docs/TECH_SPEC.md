@@ -533,6 +533,10 @@ Run summaries should preserve the current sketch's most useful ideas:
 
 Run evidence is operational evidence for a delegated agent run. It is intentionally not a durable repo-change record, terminal disposition, or lineage entry. Orbital should expose run artifacts that Prism can later attach to `ngitd-core` evidence or annotations, but Orbital should not write `.ngit/`, call `ngit`, or require `ngitd-core` at runtime.
 
+`get_run_artifact_package` should return a primary-safe `orbital_run_artifact_package` derived from the same run summary and log refs, not a new stored package file. Required top-level fields are `schema_version`, `package_kind`, `integration_posture: artifact_contract_only`, boundary metadata, run identity, digest, evidence, diagnostics, permissions, files, telemetry, and artifacts. Permission entries must omit raw adapter payloads; token telemetry must preserve canonical exact-only totals and mark adapter payloads as diagnostic-only usage when they are not canonical.
+
+Current checkpoint contract: Prism should treat `get_run_artifact_package` as the handoff bundle for an Orbital run. Orbital owns producing this derived, primary-safe artifact; Prism owns deciding whether to attach it to `ngitd-core`; `ngitd-core` owns durable repo-change memory. Orbital should not persist package files, write `.ngit/`, call `ngit`, or add an `ngitd-core` runtime dependency as part of this contract.
+
 Diagnostic evidence should be derived at summary time from existing `.orbital/` artifacts rather than stored as a second event log in the first implementation. `RunSummary` should include:
 
 - `diagnostic_timeline`: primary-safe entries with phase, label, source, optional event ID, permission ID, check command, warning code, status, and artifact reference.
@@ -610,7 +614,9 @@ Suggested layout after rename:
 
 File storage keeps the open source product easy to inspect, test, and debug. A database can be considered later if concurrent or hosted use cases require it.
 
-`.orbital/` is operational run/session storage, not a replacement for `.ngit/`. It may contain references to run artifacts, transcripts, permissions, telemetry diagnostics, and summaries. Durable repo-change memory remains external to Orbital; the current posture is an artifact contract for future Prism integration rather than direct `ngitd-core` integration.
+`.orbital/` is operational run/session storage, not a replacement for `.ngit/`. It may contain references to run artifacts, transcripts, permissions, telemetry diagnostics, and summaries. Durable repo-change memory remains external to Orbital; the current posture is an artifact contract for future Prism integration rather than direct `ngitd-core` integration: no `.ngit/` writes, no `ngit` subprocess calls, and no `ngitd-core` runtime dependency.
+
+If development pauses, resume from this storage boundary: `.orbital/` is enough to rebuild run summaries, diagnostics, and artifact packages, but it is not enough to answer durable repo lineage questions. Those questions should remain Prism/`ngitd-core` work.
 
 Storage invariants:
 

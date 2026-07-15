@@ -940,6 +940,27 @@ class OrbitalCoreTests(unittest.TestCase):
             dialogue = service.get_dialogue(summary["run_id"], include_raw=False, include_agent_chunks=False)
             self.assertFalse(any(event.get("kind") == "agent_message_chunk" for event in dialogue["events"]))
             self.assertTrue(all("raw" not in event for event in dialogue["events"]))
+
+            package = service.get_run_artifact_package(summary["run_id"])
+            self.assertEqual(package["package_kind"], "orbital_run_artifact_package")
+            self.assertEqual(package["integration_posture"], "artifact_contract_only")
+            self.assertEqual(package["boundary"]["external_coordinator"], "Prism")
+            self.assertEqual(package["boundary"]["repo_memory_owner"], "ngitd-core")
+            self.assertTrue(package["boundary"]["no_ngit_writes"])
+            self.assertTrue(package["boundary"]["no_ngit_subprocess"])
+            self.assertTrue(package["boundary"]["no_ngitd_runtime_dependency"])
+            self.assertNotIn("repo_disposition", package["boundary"])
+            self.assertNotIn("repo_lineage", package["boundary"])
+            self.assertEqual(package["run"]["status"], "completed")
+            self.assertEqual(package["run"]["execution_contract"]["selection_policy"]["implicit_model_assignment"], False)
+            self.assertEqual(package["files"]["changed_files"], ["fake_output.txt"])
+            self.assertEqual(package["files"]["attribution_scope"], "fallback_run_local")
+            self.assertIn("dialogue", package["artifacts"]["log_refs"])
+            self.assertTrue(package["artifacts"]["raw_events_omitted"])
+            self.assertFalse(package["telemetry"]["tokens"]["known"])
+            self.assertEqual(package["telemetry"]["token_sources"]["adapter_payloads"]["total"], 135)
+            self.assertIn("diagnostic-only usage", " ".join(package["telemetry"]["caveats"]))
+            self.assertIn("fake-acp-model", package["telemetry"]["model"]["models"])
         finally:
             _remove_tree(tmp)
 
@@ -1003,6 +1024,11 @@ class OrbitalCoreTests(unittest.TestCase):
             self.assertEqual(summary["tokens"]["total"], 230)
             self.assertEqual(summary["token_sources"]["adapter_payloads"]["total"], 999)
             self.assertEqual(summary["token_sources"]["external_agent_logs"]["records"][0]["agent"], "codex")
+            with patch.dict("os.environ", {"ORBITAL_AGENT_LOG_HOME": str(home)}):
+                package = service.get_run_artifact_package(run.run_id)
+            self.assertEqual(package["telemetry"]["tokens"]["total"], 230)
+            self.assertEqual(package["telemetry"]["tokens"]["source"], "external_agent_logs")
+            self.assertEqual(package["telemetry"]["token_sources"]["adapter_payloads"]["total"], 999)
         finally:
             _remove_tree(tmp)
 
@@ -1067,6 +1093,11 @@ class OrbitalCoreTests(unittest.TestCase):
             self.assertFalse(external["known"])
             self.assertEqual(len(external["records"]), 2)
             self.assertIn("2 correlated local agent-log records", external["caveats"][0])
+            with patch.dict("os.environ", {"ORBITAL_AGENT_LOG_HOME": str(home)}):
+                package = service.get_run_artifact_package(run.run_id)
+            self.assertFalse(package["telemetry"]["tokens"]["known"])
+            self.assertIn("Canonical token usage is unknown", package["telemetry"]["caveats"][0])
+            self.assertIn("2 correlated local agent-log records", " ".join(package["telemetry"]["caveats"]))
         finally:
             _remove_tree(tmp)
 
@@ -1082,6 +1113,12 @@ class OrbitalCoreTests(unittest.TestCase):
             self.assertEqual(summary["status"], "completed")
             self.assertEqual(summary["permission_counts"]["permission_count"], 1)
             self.assertEqual(summary["permission_counts"]["approved_permission_count"], 1)
+            package = service.get_run_artifact_package(summary["run_id"])
+            self.assertEqual(package["permissions"]["counts"]["approved_permission_count"], 1)
+            self.assertEqual(package["permissions"]["requests"][0]["resolved_option_id"], "allow")
+            self.assertTrue(package["permissions"]["requests"][0]["raw_payload_omitted"])
+            self.assertNotIn("raw", package["permissions"]["requests"][0])
+            self.assertNotIn("adapter_result", package["permissions"]["requests"][0])
         finally:
             _remove_tree(tmp)
 
