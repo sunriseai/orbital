@@ -115,7 +115,7 @@ class HarnessProfile:
 @dataclass
 class HarnessConfig:
     schema_version: int = 1
-    default_profile: str | None = "opencode_acp_glm52"
+    default_profile: str | None = "opencode_acp_local"
     allow_api_fallback: bool = False
     storage_root: str = ".orbital"
     profiles: list[HarnessProfile] = field(default_factory=list)

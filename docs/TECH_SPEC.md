@@ -188,6 +188,13 @@ Support tiers:
 
 Orbital should report support tier and capability gaps separately. A profile can be ready to launch while still lacking permissions, usage telemetry, stop support, or complete tool-event normalization.
 
+Profile listings, checks, and recommendations should include an `execution_contract`:
+
+- `model_assignment.mode`: `explicit_profile_model` when the profile sets `ORBITAL_ACP_MODEL`, otherwise `adapter_or_user_config_default`.
+- `model_assignment.model_id`: the exact model Orbital will send through `session/set_model`, or `null` when Orbital does not assign a model.
+- `selection_policy.implicit_model_assignment`: always `false`; Orbital must not automatically choose cheap or pinned OpenCode models from recommendations.
+- `permission_config.deterministic_ask`: `true` only when profile-level OpenCode config forces both `permission.bash=ask` and `permission.edit=ask`.
+
 Readiness and support tier are different:
 
 - Readiness answers whether Orbital can attempt to launch a profile in the current environment.

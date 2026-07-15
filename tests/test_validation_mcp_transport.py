@@ -25,6 +25,7 @@ class McpTransportValidationTests(unittest.TestCase):
             self.assertIn("get_server_info", result["tool_names"])
             self.assertIn("run_task_and_wait", result["tool_names"])
             self.assertEqual(result["server_info"]["name"], "orbital-mcp")
+            self.assertIn("deterministic by profile only", result["server_info"]["reporting_policy"]["model_assignment"])
             boundaries = result["server_info"]["system_boundaries"]
             self.assertEqual(boundaries["integration_posture"], "artifact_contract_only")
             self.assertIn("Prism", boundaries["external_coordinator"])
@@ -32,6 +33,7 @@ class McpTransportValidationTests(unittest.TestCase):
             self.assertIn("repo-change capture", boundaries["orbital_does_not_own"])
             self.assertTrue(result["profile_check"]["ok"])
             self.assertEqual(result["profile_check"]["profile_id"], "fake_acp")
+            self.assertFalse(result["profile_check"]["execution_contract"]["selection_policy"]["implicit_model_assignment"])
             self.assertEqual(result["run_summary"]["status"], "completed")
             self.assertTrue(result["safe_dialogue"]["raw_events_omitted"])
             self.assertTrue(result["safe_dialogue"]["agent_chunks_omitted"])

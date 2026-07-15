@@ -134,6 +134,10 @@ class DocsTodoTests(unittest.TestCase):
             "free for a limited time",
             "free-period data-use caveat",
             "opencode_acp_glm52_ask",
+            "execution_contract",
+            "model assignment is deterministic by explicit profile only",
+            "selection_policy.implicit_model_assignment",
+            "does not automatically choose cheap or pinned models",
         ]:
             self.assertIn(phrase, docs)
 

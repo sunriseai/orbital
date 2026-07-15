@@ -10,6 +10,9 @@ from typing import Any
 from .models import HarnessConfig, HarnessProfile, ProfileCapabilities, ReadinessResult, TaskInput
 from .models import to_jsonable
 
+PROFILE_MODEL_ENV = "ORBITAL_ACP_MODEL"
+OPENCODE_CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
+
 
 class ProfileSelectionError(ValueError):
     pass
@@ -193,6 +196,7 @@ class HarnessRegistry:
                     "profile": to_jsonable(profile),
                     "readiness": to_jsonable(readiness),
                     "normalized_capabilities": to_jsonable(capabilities),
+                    "execution_contract": profile_execution_contract(profile),
                 }
             )
         recommendations.sort(key=lambda item: (-int(item["eligible"]), -int(item["score"]), str(item["profile_id"])))
@@ -305,6 +309,52 @@ def _claude_agent_acp_missing() -> list[str]:
     elif major < 22:
         missing.append(f"node >= 22 required for claude-agent-acp; found {version}")
     return missing
+
+
+def profile_execution_contract(profile: HarnessProfile) -> dict[str, Any]:
+    explicit_model = profile.env.get(PROFILE_MODEL_ENV)
+    opencode_config = _json_env(profile.env.get(OPENCODE_CONFIG_ENV))
+    permission_config = opencode_config.get("permission") if isinstance(opencode_config.get("permission"), dict) else {}
+    contract = {
+        "model_assignment": {
+            "mode": "explicit_profile_model" if explicit_model else "adapter_or_user_config_default",
+            "model_id": explicit_model,
+            "deterministic": bool(explicit_model),
+            "selection_rule": (
+                "Orbital sends session/set_model from this profile's ORBITAL_ACP_MODEL."
+                if explicit_model
+                else "Orbital does not assign a model; the secondary harness uses its own configured default."
+            ),
+        },
+        "permission_config": {
+            "mode": "profile_env" if permission_config else "adapter_or_user_config_default",
+            "bash": permission_config.get("bash"),
+            "edit": permission_config.get("edit"),
+            "deterministic_ask": permission_config.get("bash") == "ask" and permission_config.get("edit") == "ask",
+        },
+        "selection_policy": {
+            "implicit_model_assignment": False,
+            "requires_explicit_profile_for_model": bool(explicit_model),
+            "metered_profiles_require_opt_in": profile.metered_api,
+        },
+    }
+    if profile.runtime_family == "opencode":
+        contract["opencode"] = {
+            "command": profile.command,
+            "pure_mode": profile.command == ["opencode", "acp", "--pure"],
+            "config_env_present": OPENCODE_CONFIG_ENV in profile.env,
+        }
+    return contract
+
+
+def _json_env(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _node_major_version(version: str) -> int | None:

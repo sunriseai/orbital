@@ -8,7 +8,7 @@ from typing import Any
 from . import __version__
 from .config import CONFIG_FILE, load_config
 from .guidance import prompt_pack
-from .profiles import HarnessRegistry
+from .profiles import HarnessRegistry, profile_execution_contract
 
 
 def main() -> None:
@@ -42,7 +42,7 @@ def main() -> None:
     pack_install.add_argument("--target", help="Explicit file path. Defaults under .orbital/prompt-packs.")
 
     smoke = subparsers.add_parser("smoke", help="Print the profile smoke-test command.")
-    smoke.add_argument("--profile", default="opencode_acp_glm52")
+    smoke.add_argument("--profile", default="opencode_acp_local")
     smoke.add_argument("--workdir", help="Optional target workdir for the smoke test.")
 
     args = parser.parse_args()
@@ -115,6 +115,7 @@ def _doctor(base_dir: Path) -> dict[str, Any]:
                 "ready": readiness.ready,
                 "status": readiness.status,
                 "missing_prerequisites": readiness.missing_prerequisites,
+                "execution_contract": profile_execution_contract(profile),
             }
         )
     storage_root = base_dir / config.storage_root
@@ -147,7 +148,7 @@ def _init_payload(base_dir: Path) -> dict[str, Any]:
         "doctor": doctor,
         "mcp_config_example": mcp_config("generic", base_dir),
         "prompt_pack_command": "orbital prompt-pack print --host generic",
-        "smoke_command": f"orbital-mcp-smoke --profile opencode_acp_glm52 --base-dir {base_dir}",
+        "smoke_command": f"orbital-mcp-smoke --profile opencode_acp_local --base-dir {base_dir}",
     }
 
 

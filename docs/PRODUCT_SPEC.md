@@ -198,8 +198,11 @@ Recommendation output should include enough context for the primary harness to m
 - capability matches and gaps
 - classification matches
 - locality and cost posture
+- execution contract, including whether Orbital will send `session/set_model`
 - known limits
 - reasoned ranking
+
+Orbital should not automatically assign a cheap or pinned OpenCode model from a recommendation. OpenCode model assignment is deterministic by explicit profile only: if a profile declares `ORBITAL_ACP_MODEL`, Orbital sends that exact model with `session/set_model`; otherwise OpenCode uses its own configured default.
 
 Orbital should not silently switch profiles during a session unless the primary explicitly starts a new run with a different profile.
 

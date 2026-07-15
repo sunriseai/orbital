@@ -262,7 +262,7 @@ def load_config(base_dir: Path | str = ".") -> HarnessConfig:
     base = Path(base_dir)
     config_path = base / CONFIG_FILE
     if not config_path.exists():
-        return HarnessConfig(default_profile="opencode_acp_glm52", profiles=default_profiles())
+        return HarnessConfig(default_profile="opencode_acp_local", profiles=default_profiles())
 
     data = json.loads(config_path.read_text(encoding="utf-8"))
     profiles = [_profile_from_dict(item) for item in data.get("profiles", [])]
@@ -270,7 +270,7 @@ def load_config(base_dir: Path | str = ".") -> HarnessConfig:
         profiles = default_profiles()
     return HarnessConfig(
         schema_version=int(data.get("schema_version", 1)),
-        default_profile=data.get("default_profile", "opencode_acp_glm52"),
+        default_profile=data.get("default_profile", "opencode_acp_local"),
         allow_api_fallback=bool(data.get("allow_api_fallback", False)),
         storage_root=data.get("storage_root", ".orbital"),
         profiles=profiles,

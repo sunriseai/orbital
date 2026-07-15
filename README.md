@@ -137,7 +137,7 @@ Then run a local smoke test:
 orbital-mcp-smoke --profile fake_acp --workdir /tmp/orbital-smoke
 ```
 
-For real harnesses, start with `orbital profiles` and `orbital doctor`, then configure your primary harness with the MCP config emitted by `orbital mcp-config`. API-backed or metered profiles are intentionally explicit opt-in; the default posture favors local/subscription profiles.
+For real harnesses, start with `orbital profiles` and `orbital doctor`, then configure your primary harness with the MCP config emitted by `orbital mcp-config`. API-backed or metered profiles are intentionally explicit opt-in; the default posture favors local/subscription profiles. OpenCode model assignment is deterministic by explicit profile only: Orbital sends `session/set_model` only for profiles with `ORBITAL_ACP_MODEL`, such as `opencode_acp_big_pickle_ask`, and does not automatically choose cheap or pinned models from recommendations.
 
 Runtime data is written under `.orbital/` by default. That directory is local state and should not be committed.
 

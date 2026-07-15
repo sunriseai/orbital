@@ -6,7 +6,7 @@ from .config import load_config
 from .errors import error_response, ok_response
 from .guidance import primary_guidance, worker_safe_constraints
 from .models import TaskInput, to_jsonable
-from .profiles import HarnessRegistry
+from .profiles import HarnessRegistry, profile_execution_contract
 from .service import TaskRunService
 from .store import RunStore
 
@@ -52,6 +52,7 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                 "diagnostic_evidence": "run summaries include primary-safe diagnostic_timeline and diagnostic_explainability fields derived from existing .orbital artifacts for future Prism attachment",
                 "token_reporting": "canonical local agent-log telemetry from Codex, Claude, and OpenCode when correlated by workspace and run window; adapter usage is diagnostic only",
                 "model_reporting": "exact adapter model metadata when available; unknown otherwise",
+                "model_assignment": "deterministic by profile only; Orbital does not auto-select cheap or pinned OpenCode models",
                 "stop_safety": "get_run_liveness recommendation should be checked before stop_task_run for suspected inactivity",
             },
             "system_boundaries": {
@@ -107,6 +108,7 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                     **to_jsonable(profile),
                     "readiness": to_jsonable(readiness := service.registry.readiness(profile, root)),
                     "normalized_capabilities": to_jsonable(service.registry.capabilities(profile, readiness)),
+                    "execution_contract": profile_execution_contract(profile),
                 }
                 for profile in service.registry.list_profiles()
             ]
@@ -123,6 +125,7 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                     "profile": to_jsonable(profile),
                     "readiness": to_jsonable(readiness),
                     "normalized_capabilities": to_jsonable(service.registry.capabilities(profile, readiness)),
+                    "execution_contract": profile_execution_contract(profile),
                 }
             )
         except Exception as exc:
@@ -145,6 +148,7 @@ def create_mcp_server(base_dir: Path | str = ".") -> Any:
                     "auth_mode": profile.auth_mode,
                     "cost_posture": profile.cost_posture,
                     "metered_api": profile.metered_api,
+                    "execution_contract": profile_execution_contract(profile),
                 }
             )
         except Exception as exc:

@@ -34,7 +34,7 @@ from orbital_mcp.models import (  # noqa: E402
 )
 from orbital_mcp.permissions import choose_option, normalize_permission  # noqa: E402
 from orbital_mcp.policy import CommandPolicyConfig, evaluate_command_policy  # noqa: E402
-from orbital_mcp.profiles import HarnessRegistry  # noqa: E402
+from orbital_mcp.profiles import HarnessRegistry, profile_execution_contract  # noqa: E402
 from orbital_mcp.service import TaskRunService  # noqa: E402
 from orbital_mcp.snapshots import compare_snapshots, snapshot_workdir  # noqa: E402
 from orbital_mcp.store import RunStore  # noqa: E402
@@ -47,6 +47,7 @@ class OrbitalCoreTests(unittest.TestCase):
         config = load_config(Path("/tmp/orbital-config-does-not-exist"))
         profile = next(item for item in config.profiles if item.id == "opencode_acp_local")
 
+        self.assertEqual(config.default_profile, "opencode_acp_local")
         self.assertIn("fast_smoke", profile.classification.task_tags)
         self.assertEqual(profile.classification.locality, "subscription")
         self.assertEqual(profile.support.tier, "experimental_acp")
@@ -86,6 +87,25 @@ class OrbitalCoreTests(unittest.TestCase):
         self.assertEqual(big_pickle.env["ORBITAL_ACP_MODEL"], "opencode/big-pickle")
         self.assertIn("cheap_smoke", big_pickle.classification.task_tags)
         self.assertIn("Never selected implicitly.", big_pickle.support.notes)
+
+    def test_opencode_execution_contracts_keep_model_assignment_explicit(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+        local = next(item for item in config.profiles if item.id == "opencode_acp_local")
+        big_pickle = next(item for item in config.profiles if item.id == "opencode_acp_big_pickle_ask")
+
+        local_contract = profile_execution_contract(local)
+        big_pickle_contract = profile_execution_contract(big_pickle)
+
+        self.assertEqual(local_contract["model_assignment"]["mode"], "adapter_or_user_config_default")
+        self.assertIsNone(local_contract["model_assignment"]["model_id"])
+        self.assertFalse(local_contract["selection_policy"]["implicit_model_assignment"])
+
+        self.assertEqual(big_pickle_contract["model_assignment"]["mode"], "explicit_profile_model")
+        self.assertEqual(big_pickle_contract["model_assignment"]["model_id"], "opencode/big-pickle")
+        self.assertTrue(big_pickle_contract["model_assignment"]["deterministic"])
+        self.assertTrue(big_pickle_contract["permission_config"]["deterministic_ask"])
+        self.assertFalse(big_pickle_contract["selection_policy"]["implicit_model_assignment"])
+        self.assertTrue(big_pickle_contract["selection_policy"]["requires_explicit_profile_for_model"])
 
     def test_default_profiles_separate_claude_cli_from_api_backed_agent_acp(self) -> None:
         config = load_config(Path("/tmp/orbital-config-does-not-exist"))
@@ -285,6 +305,27 @@ class OrbitalCoreTests(unittest.TestCase):
 
         profile, _ = registry.select(ROOT, profile_id="opencode_acp_glm52", task=TaskInput("t", "o"))
         self.assertEqual(profile.id, "opencode_acp_glm52")
+
+    def test_registry_does_not_select_pinned_opencode_model_without_explicit_profile(self) -> None:
+        config = load_config(Path("/tmp/orbital-config-does-not-exist"))
+        registry = HarnessRegistry(config)
+
+        profile, _ = registry.select(ROOT, task=TaskInput("t", "o", allow_metered_api=True))
+
+        self.assertEqual(profile.id, "opencode_acp_local")
+
+        result = registry.recommend(
+            task_tags=["cheap_smoke", "permission_smoke"],
+            required_capabilities=["dialogue", "permissions"],
+            cost_preference="free_or_low_cost",
+        )
+        big_pickle = next(item for item in result["recommendations"] if item["profile_id"] == "opencode_acp_big_pickle_ask")
+        self.assertFalse(big_pickle["eligible"])
+        self.assertIn("metered API profile requires explicit opt-in", big_pickle["caveats"])
+        self.assertEqual(
+            big_pickle["execution_contract"]["model_assignment"]["model_id"],
+            "opencode/big-pickle",
+        )
 
     def test_preflight_exposes_support_classification_and_capability_gaps(self) -> None:
         cli = HarnessProfile(
